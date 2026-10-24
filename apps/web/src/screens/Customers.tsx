@@ -191,6 +191,20 @@ function CustomerSheet({
           <span>Lifetime total</span>
           <span>{mmk(grand)}</span>
         </div>
+        {data.sales.length === 0 && (
+          <div className="chips" style={{ marginTop: 10 }}>
+            <button
+              className="btn small danger"
+              onClick={async () => {
+                if (!confirm(`Delete ${c.name}?`)) return;
+                await api.deleteCustomer(c.id);
+                onClose();
+              }}
+            >
+              Delete customer
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

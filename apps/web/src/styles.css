@@ -18,7 +18,10 @@ html, body { margin: 0; padding: 0; }
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  /* Myanmar glyphs come from the bundled Noto Sans Myanmar webfont, so every
+     phone renders the same; Latin falls through to system fonts. */
+  font-family: "Noto Sans Myanmar", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", sans-serif;
   font-size: 15px;
 }
 button {

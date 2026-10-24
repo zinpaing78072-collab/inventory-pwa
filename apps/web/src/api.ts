@@ -150,6 +150,7 @@ export const api = {
   customers: (q: string) => request<Customer[]>(`/customers?q=${encodeURIComponent(q)}`),
   customer: (id: string) =>
     request<{ customer: Customer; sales: Sale[] }>(`/customers/${id}`),
+  deleteCustomer: (id: string) => request<{ ok: boolean }>(`/customers/${id}`, { method: "DELETE" }),
   createCustomer: (data: unknown) =>
     request<{ id: string }>("/customers", { method: "POST", body: jsonBody(data) }),
   patchCustomer: (id: string, data: unknown) =>

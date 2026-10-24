@@ -733,6 +733,19 @@ api.post("/customers", auth.requireDevice, h(async (req, res) => {
   res.json({ id });
 }));
 
+api.delete("/customers/:id", auth.requireDevice, h(async (req, res) => {
+  const c = db.prepare("SELECT * FROM customers WHERE id = ?").get(req.params.id) as any;
+  if (!c) throw new HttpError("Customer not found", 404);
+  const sold = (
+    db.prepare("SELECT COUNT(*) AS n FROM sales WHERE customer_id = ?").get(c.id) as { n: number }
+  ).n;
+  if (sold > 0) {
+    throw new HttpError("Customer has sales — edit instead of deleting", 409);
+  }
+  txn(() => db.prepare("DELETE FROM customers WHERE id = ?").run(c.id));
+  res.json({ ok: true });
+}));
+
 api.patch("/customers/:id", auth.requireDevice, h(async (req, res) => {
   const c = db.prepare("SELECT * FROM customers WHERE id = ?").get(req.params.id) as any;
   if (!c) throw new HttpError("Customer not found", 404);
