@@ -28,6 +28,10 @@ Lint/type safety: `pnpm typecheck`. Build both apps: `pnpm build`.
 
 ## Deploying to the server phone (Termux)
 
+Guided one-time setup: run `bash scripts/setup-phone.sh` on this Mac and drive
+the Android phone through each step (Termux install, packages, clone, build,
+pm2, reboot-proofing, pairing). You can interrupt it and re-run anytime.
+
 One-time:
 
 ```sh
