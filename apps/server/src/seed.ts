@@ -133,8 +133,8 @@ txn(() => {
   }
 
   for (const c of CUSTOMERS) {
-    db.prepare("INSERT INTO customers (id, name, phone1, phone2, created_at) VALUES (?,?,?,?,?)").run(
-      c.id, c.name, c.phones[0] ?? "", "", now - 30 * DAY
+    db.prepare("INSERT INTO customers (id, name, phone1, phone2, notes, created_at) VALUES (?,?,?,?,?,?)").run(
+      c.id, c.name, c.phones[0] ?? "", "", "", now - 30 * DAY
     );
   }
 

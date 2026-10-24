@@ -73,13 +73,15 @@ function CustomerFields({
   name,
   phone1,
   phone2,
+  notes,
   set,
 }: {
   customerId: string | null;
   name: string;
   phone1: string;
   phone2: string;
-  set: (v: { customerId?: string | null; name?: string; phone1?: string; phone2?: string }) => void;
+  notes: string;
+  set: (v: { customerId?: string | null; name?: string; phone1?: string; phone2?: string; notes?: string }) => void;
 }) {
   const [matches, setMatches] = useState<Customer[] | null>(null);
   const debounce = useRef<number>(undefined);
@@ -114,7 +116,7 @@ function CustomerFields({
               key={c.id}
               className="custchip"
               onClick={() =>
-                set({ customerId: c.id, name: c.name, phone1: c.phone1, phone2: c.phone2 })
+                set({ customerId: c.id, name: c.name, phone1: c.phone1, phone2: c.phone2, notes: c.notes })
               }
             >
               <span className="av">{c.name.slice(0, 2).toUpperCase()}</span>
@@ -137,6 +139,10 @@ function CustomerFields({
           <input inputMode="tel" value={phone2} onChange={(e) => set({ phone2: e.target.value, customerId: null })} />
         </div>
       </div>
+      <div className="frow">
+        <label>Customer notes (optional)</label>
+        <input placeholder="Regular, prefers dresses, delivery address…" value={notes} onChange={(e) => set({ notes: e.target.value })} />
+      </div>
     </>
   );
 }
@@ -158,6 +164,7 @@ export function RecordSaleSheet({
   const [name, setName] = useState("");
   const [phone1, setPhone1] = useState("");
   const [phone2, setPhone2] = useState("");
+  const [notes, setNotes] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -194,6 +201,7 @@ export function RecordSaleSheet({
         customerName: name.trim(),
         phone1: phone1.trim(),
         phone2: phone2.trim(),
+        customerNotes: notes.trim(),
         lines: lines.map((l) => ({ variantId: l.variantId, qty: l.qty })),
       });
       onDone();
@@ -262,11 +270,13 @@ export function RecordSaleSheet({
           name={name}
           phone1={phone1}
           phone2={phone2}
+          notes={notes}
           set={(v) => {
             if (v.customerId !== undefined) setCustomerId(v.customerId);
             if (v.name !== undefined) setName(v.name);
             if (v.phone1 !== undefined) setPhone1(v.phone1);
             if (v.phone2 !== undefined) setPhone2(v.phone2);
+            if (v.notes !== undefined) setNotes(v.notes);
           }}
         />
 

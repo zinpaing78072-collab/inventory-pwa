@@ -60,6 +60,7 @@ export interface Customer {
   name: string;
   phone1: string;
   phone2: string;
+  notes: string;
   createdAt: number;
 }
 
@@ -82,6 +83,7 @@ export interface Sale {
   customerId: string | null;
   customerName: string; // snapshot — sales stay readable even if customer edited
   customerPhone: string;
+  customerNotes: string; // snapshot of customer notes at sale time
   at: number;
   lines: SaleLine[];
   total: number;

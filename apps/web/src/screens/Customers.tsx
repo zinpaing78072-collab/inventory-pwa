@@ -145,8 +145,14 @@ function CustomerSheet({
               if (name === null) return;
               const p1 = prompt("Phone 1", c.phone1);
               const p2 = prompt("Phone 2", c.phone2);
-              if (p1 !== null || p2 !== null) {
-                await api.patchCustomer(c.id, { name, phone1: p1 ?? c.phone1, phone2: p2 ?? c.phone2 });
+              const nt = prompt("Notes", c.notes ?? "");
+              if (p1 !== null || p2 !== null || nt !== null) {
+                await api.patchCustomer(c.id, {
+                  name,
+                  phone1: p1 ?? c.phone1,
+                  phone2: p2 ?? c.phone2,
+                  notes: nt ?? c.notes ?? "",
+                });
                 await onRefreshed();
               }
             }}
@@ -154,6 +160,7 @@ function CustomerSheet({
             Edit
           </button>
         </div>
+        {c.notes && <div className="sub" style={{ whiteSpace: "pre-wrap", marginTop: 2 }}>{c.notes}</div>}
         <div className="chips-label">Purchase history</div>
         {data.sales.length === 0 && <div className="sub" style={{ padding: "8px 0 14px" }}>No purchases yet.</div>}
         {data.sales.map((s) => (
@@ -196,6 +203,7 @@ function AddCustomerSheet({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
   const [phone1, setPhone1] = useState("");
   const [phone2, setPhone2] = useState("");
+  const [notes, setNotes] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -206,7 +214,7 @@ function AddCustomerSheet({ onClose }: { onClose: () => void }) {
     }
     setBusy(true);
     try {
-      await api.createCustomer({ name: name.trim(), phone1, phone2 });
+      await api.createCustomer({ name: name.trim(), phone1, phone2, notes });
       toast("Customer added");
       onClose();
     } catch (e: unknown) {
@@ -234,6 +242,14 @@ function AddCustomerSheet({ onClose }: { onClose: () => void }) {
             <label>Phone 2</label>
             <input inputMode="tel" value={phone2} onChange={(e) => setPhone2(e.target.value)} />
           </div>
+        </div>
+        <div className="frow">
+          <label>Notes (optional)</label>
+          <input
+            placeholder="Regular, sizes, delivery address…"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
         </div>
         {err && <div className="err">{err}</div>}
         <button className="btn primary" style={{ width: "100%", marginTop: 14 }} onClick={save} disabled={busy}>

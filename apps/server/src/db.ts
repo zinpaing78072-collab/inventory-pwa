@@ -19,7 +19,7 @@ db.exec("PRAGMA journal_mode = WAL");
 db.exec("PRAGMA foreign_keys = ON");
 db.exec("PRAGMA busy_timeout = 5000");
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export function migrate(): void {
   const dbv = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
@@ -127,6 +127,22 @@ export function migrate(): void {
       last_seen INTEGER NOT NULL
     );
   `);
+
+  /* v2: customer notes (free string field beside name + phones) */
+  if (dbv < 2) {
+    const cols = (
+      db.prepare("PRAGMA table_info(customers)").all() as { name: string }[]
+    ).map((c) => c.name);
+    if (!cols.includes("notes")) {
+      db.exec("ALTER TABLE customers ADD COLUMN notes TEXT NOT NULL DEFAULT ''");
+    }
+    const salesCols = (
+      db.prepare("PRAGMA table_info(sales)").all() as { name: string }[]
+    ).map((c) => c.name);
+    if (!salesCols.includes("customer_notes")) {
+      db.exec("ALTER TABLE sales ADD COLUMN customer_notes TEXT NOT NULL DEFAULT ''");
+    }
+  }
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 

@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 
+import { HttpError } from "./errors.js";
+
 import { db, setMeta, getMeta, txn } from "./db.js";
 import type { DeviceInfo, PairInfo } from "@inv/shared";
 
@@ -63,7 +65,7 @@ export function requireDevice(req: any, res: any, next: any): void {
 
 export function pairWithCode(code: string, name: string): string {
   if (!pairingAlive() || code !== getMeta("pairing_code")) {
-    throw Object.assign(new Error("Wrong or expired pairing code"), { status: 403 });
+    throw new HttpError("Wrong or expired pairing code", 403);
   }
   const token = randomBytes(24).toString("hex");
   txn(() => {

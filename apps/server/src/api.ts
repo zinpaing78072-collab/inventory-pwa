@@ -4,6 +4,7 @@ import path from "node:path";
 import { unlinkSync, existsSync, mkdirSync } from "node:fs";
 import * as shared from "@inv/shared";
 
+import { HttpError } from "./errors.js";
 import {
   db,
   txn,
@@ -33,6 +34,18 @@ const upload = multer({
 
 /* ---------- helpers ---------- */
 
+const str = (v: unknown, fallback = ""): string =>
+  typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : fallback;
+const int = (v: unknown): number => {
+  const n = typeof v === "number" ? Math.floor(v) : parseInt(String(v ?? ""), 10);
+  return Number.isFinite(n) ? n : 0;
+};
+const reqInt = (v: unknown, what: string): number => {
+  const n = int(v);
+  if (!Number.isFinite(n) || n < 0) throw new HttpError(`Invalid ${what}`, 400);
+  return n;
+};
+
 type Handler = (req: any, res: any, next: any) => unknown | Promise<unknown>;
 
 function h(fn: Handler): Handler {
@@ -47,24 +60,6 @@ function h(fn: Handler): Handler {
     });
   };
 }
-
-export class HttpError extends Error {
-  constructor(message: string, public status: number) {
-    super(message);
-  }
-}
-
-const str = (v: unknown, fallback = ""): string =>
-  typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : fallback;
-const int = (v: unknown): number => {
-  const n = typeof v === "number" ? Math.floor(v) : parseInt(String(v ?? ""), 10);
-  return Number.isFinite(n) ? n : 0;
-};
-const reqInt = (v: unknown, what: string): number => {
-  const n = int(v);
-  if (!Number.isFinite(n) || n < 0) throw new HttpError(`Invalid ${what}`, 400);
-  return n;
-};
 
 /* ---------- product mapping ---------- */
 
@@ -541,9 +536,16 @@ function findOrCreateCustomer(body: any): { id: string; name: string; phone: str
   const name = str(body.customerName);
   const phone1 = str(body.phone1);
   const phone2 = str(body.phone2);
+  const notes = str(body.customerNotes);
   if (body.customerId) {
     const row = db.prepare("SELECT * FROM customers WHERE id = ?").get(str(body.customerId)) as any;
-    if (row) return { id: row.id, name: row.name, phone: row.phone1 || row.phone2 };
+    if (row) {
+      /* notes provided at sale time and the record has none: capture them */
+      if (notes && !row.notes) {
+        db.prepare("UPDATE customers SET notes = ? WHERE id = ?").run(notes, row.id);
+      }
+      return { id: row.id, name: row.name, phone: row.phone1 || row.phone2 };
+    }
   }
   if (name) {
     const all = db.prepare("SELECT * FROM customers").all() as any[];
@@ -556,17 +558,16 @@ function findOrCreateCustomer(body: any): { id: string; name: string; phone: str
       if (phone1 && !found.phone1) {
         db.prepare("UPDATE customers SET phone1 = ? WHERE id = ?").run(phone1, found.id);
       }
+      if (notes && !found.notes) {
+        db.prepare("UPDATE customers SET notes = ? WHERE id = ?").run(notes, found.id);
+      }
       return { id: found.id, name: found.name, phone: found.phone1 || found.phone2 || phone1 };
     }
   }
   const id = newId();
-  db.prepare("INSERT INTO customers (id, name, phone1, phone2, created_at) VALUES (?,?,?,?,?)").run(
-    id,
-    name || "Walk-in",
-    phone1,
-    phone2,
-    Date.now()
-  );
+  db.prepare(
+    "INSERT INTO customers (id, name, phone1, phone2, notes, created_at) VALUES (?,?,?,?,?,?)"
+  ).run(id, name || "Walk-in", phone1, phone2, notes, Date.now());
   return { id, name: name || "Walk-in", phone: phone1 };
 }
 
@@ -592,8 +593,8 @@ api.post("/sales", auth.requireDevice, h(async (req, res) => {
     const cust = findOrCreateCustomer(req.body ?? {});
     const at = Date.now();
     db.prepare(
-      "INSERT INTO sales (id, customer_id, customer_name, customer_phone, at) VALUES (?,?,?,?,?)"
-    ).run(saleId, cust.id || null, cust.name, cust.phone, at);
+      "INSERT INTO sales (id, customer_id, customer_name, customer_phone, customer_notes, at) VALUES (?,?,?,?,?,?)"
+    ).run(saleId, cust.id || null, cust.name, cust.phone, str(req.body?.customerNotes), at);
 
     const lineStmt = db.prepare(
       `INSERT INTO sale_lines
@@ -626,6 +627,7 @@ async function getSale(id: string): Promise<shared.Sale | undefined> {
     customerId: row.customer_id,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
+    customerNotes: row.customer_notes ?? "",
     at: row.at,
     total,
     returnedQty,
@@ -696,6 +698,7 @@ api.get("/customers", auth.requireDevice, h(async (req, res) => {
       name: c.name,
       phone1: c.phone1,
       phone2: c.phone2,
+      notes: c.notes ?? "",
       createdAt: c.created_at,
     }))
   );
@@ -710,7 +713,7 @@ api.get("/customers/:id", auth.requireDevice, h(async (req, res) => {
     const sale = await getSale(s.id);
     if (sale) full.push(sale);
   }
-  res.json({ customer: { id: c.id, name: c.name, phone1: c.phone1, phone2: c.phone2, createdAt: c.created_at }, sales: full });
+  res.json({ customer: { id: c.id, name: c.name, phone1: c.phone1, phone2: c.phone2, notes: c.notes ?? "", createdAt: c.created_at }, sales: full });
 }));
 
 api.post("/customers", auth.requireDevice, h(async (req, res) => {
@@ -718,11 +721,12 @@ api.post("/customers", auth.requireDevice, h(async (req, res) => {
   if (!name) throw new HttpError("Name required", 400);
   const id = newId();
   txn(() =>
-    db.prepare("INSERT INTO customers (id, name, phone1, phone2, created_at) VALUES (?,?,?,?,?)").run(
+    db.prepare("INSERT INTO customers (id, name, phone1, phone2, notes, created_at) VALUES (?,?,?,?,?,?)").run(
       id,
       name,
       str(req.body?.phone1),
       str(req.body?.phone2),
+      str(req.body?.notes),
       Date.now()
     )
   );
@@ -733,10 +737,11 @@ api.patch("/customers/:id", auth.requireDevice, h(async (req, res) => {
   const c = db.prepare("SELECT * FROM customers WHERE id = ?").get(req.params.id) as any;
   if (!c) throw new HttpError("Customer not found", 404);
   txn(() =>
-    db.prepare("UPDATE customers SET name = ?, phone1 = ?, phone2 = ? WHERE id = ?").run(
+    db.prepare("UPDATE customers SET name = ?, phone1 = ?, phone2 = ?, notes = ? WHERE id = ?").run(
       req.body?.name !== undefined ? str(req.body.name) : c.name,
       req.body?.phone1 !== undefined ? str(req.body.phone1) : c.phone1,
       req.body?.phone2 !== undefined ? str(req.body.phone2) : c.phone2,
+      req.body?.notes !== undefined ? str(req.body.notes) : c.notes,
       c.id
     )
   );
