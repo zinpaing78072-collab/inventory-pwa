@@ -5,7 +5,7 @@ import { api } from "../api";
 import { useApp } from "../App";
 import { BottomSheet } from "../components/BottomSheet";
 import { ReturnSheet } from "../components/actions";
-import { dateShort, initials } from "../components/util";
+import { dateShort, initials, nowDateLabel } from "../components/util";
 
 /* Customers screen: separate from products (per Q19 — settled as separate screens).
  *     Search name / phone -> chip list; tap -> history sheet with returns. */
@@ -42,9 +42,7 @@ export default function Customers() {
             TH Fashion
             <small>Customers</small>
           </div>
-          <button className="btn small" onClick={() => setAdding(true)}>
-            + Add
-          </button>
+          <span className="date">{nowDateLabel()}</span>
         </div>
         <div className="search">
           <span className="mag">⌕</span>
@@ -106,6 +104,10 @@ export default function Customers() {
           onDone={() => void 0}
         />
       )}
+
+      <button className="fab" aria-label="Add customer" onClick={() => setAdding(true)}>
+        +
+      </button>
     </>
   );
 }
