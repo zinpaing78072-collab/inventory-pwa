@@ -1,0 +1,17 @@
+{
+  "name": "TH Fashion — Inventory",
+  "short_name": "Inventory",
+  "description": "Stock and sales for a small home clothing shop",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAFAF7",
+  "theme_color": "#FAFAF7",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# server runtime data — never commit inventory data or photos
+apps/server/data/
+apps/server/backups/
+apps/server/seed-assets/
+
+# phone-side local files
+*.db
+*.db-wal
+*.db-shm
