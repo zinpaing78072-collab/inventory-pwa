@@ -39,6 +39,7 @@ export default function Settings() {
       <header className="head">
         <div className="head-top">
           <div className="wordmark">
+            <img className="logo" src="/logo.png" alt="" />
             Settings
             <small>{shopName || "TH Fashion"}</small>
           </div>

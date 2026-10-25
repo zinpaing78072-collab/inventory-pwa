@@ -33,6 +33,7 @@ export default function Pair({ onPaired }: { onPaired: () => void }) {
   return (
     <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", padding: 24 }}>
       <div style={{ width: "min(360px, 100%)" }}>
+        <img className="logo-lg" src="/logo.png" alt="TH Fashion" />
         <div className="wordmark" style={{ textAlign: "center", marginBottom: 22 }}>
           TH Fashion
           <small>Inventory</small>

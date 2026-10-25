@@ -39,6 +39,7 @@ export default function Customers() {
       <header className="head">
         <div className="head-top">
           <div className="wordmark">
+            <img className="logo" src="/logo.png" alt="" />
             TH Fashion
             <small>Customers</small>
           </div>

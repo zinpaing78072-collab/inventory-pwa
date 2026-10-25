@@ -45,6 +45,7 @@ export default function Home() {
       <header className="head">
         <div className="head-top">
           <div className="wordmark">
+            <img className="logo" src="/logo.png" alt="" />
             TH Fashion
             <small>Inventory</small>
           </div>
