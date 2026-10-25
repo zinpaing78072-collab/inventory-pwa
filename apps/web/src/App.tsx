@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { Route, Routes } from "react-router-dom";
 
-import { api, getToken } from "./api";
+import { api, getToken, ApiUnpairedError } from "./api";
 import Pair from "./screens/Pair";
 import Home from "./screens/Home";
 import ProductDetail from "./screens/ProductDetail";
@@ -35,7 +35,8 @@ const AppCtx = createContext<Ctx>({
 export const useApp = () => useContext(AppCtx);
 
 export default function App() {
-  const [paired, setPaired] = useState<boolean>(!!getToken());
+  const [paired, setPaired] = useState<boolean>(false);
+  const [booting, setBooting] = useState<boolean>(() => !!getToken());
   const [rev, setRev] = useState(0);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
@@ -47,28 +48,43 @@ export default function App() {
     setTimeout(() => setToastMsg((m) => (m === msg ? null : m)), 2600);
   }, []);
 
-  /* boot: confirm pairing — server may have wiped this device (Settings -> revoke) */
+  /* boot: verify the device token against a guarded route. A server that is
+   * merely slow/asleep (Android Wi-Fi wake race when reopening the app) must
+   * read as "reconnecting" + retry — never as "lost pairing", or phones that
+   * are already registered get bounced to the pair screen every session. */
   useEffect(() => {
     if (!getToken()) {
       setPaired(false);
+      setBooting(false);
       return;
     }
-    api
-      .health()
-      .then((h) => {
-        if (!h.paired) {
-          /* server reports unpaired; verify our token against a guarded route */
-          api
-            .settings()
-            .then(() => setPaired(true))
-            .catch(() => {
-              setPaired(false);
-            });
-        } else {
-          setPaired(true);
+    let alive = true;
+    let timer: number | undefined;
+    const attempt = async () => {
+      try {
+        await api.settings();
+        if (!alive) return;
+        setOnline(true);
+        setPaired(true);
+        setBooting(false);
+      } catch (err) {
+        if (!alive) return;
+        if (err instanceof ApiUnpairedError) {
+          /* token provably dead (server answered 401) — genuinely re-pair */
+          setPaired(false);
+          setBooting(false);
+          return;
         }
-      })
-      .catch(() => setPaired(false));
+        /* unreachable (offline/timeout/server hiccup): keep the token, retry */
+        setOnline(false);
+        timer = window.setTimeout(attempt, 2500);
+      }
+    };
+    void attempt();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   /* polled freshness: ~5s; a change on any device bumps rev so screens refetch */
@@ -122,6 +138,10 @@ export default function App() {
     () => ({ paired, setPaired, rev, bump, toast, toastMsg }),
     [paired, rev, toast, toastMsg]
   );
+
+  if (booting) {
+    return <div className="boot-msg">Connecting to the TH Fashion server…</div>;
+  }
 
   if (!paired) {
     return (
