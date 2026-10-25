@@ -11,16 +11,9 @@ echo "==> installing dependencies"
 pnpm install --frozen-lockfile
 
 echo "==> building (server bundle + PWA)"
-if [ -n "${TERMUX_VERSION:-}" ]; then
-  # Termux: pnpm's script layer mangles multi-flag build commands into phantom
-  # arguments (esbuild reports "multiple input files"), so call the tools
-  # directly instead of going through the package.json scripts.
-  ( cd apps/server && ./node_modules/.bin/esbuild src/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js )
-  ( cd apps/web && ./node_modules/.bin/vite build )
-else
-  pnpm --filter @inv/server build
-  pnpm --filter @inv/web build
-fi
+# esbuild's JS API everywhere: CLI argv handling breaks on Termux/Android.
+(cd apps/server && node build.mjs)
+(cd apps/web && ./node_modules/.bin/vite build)
 
 echo "==> restarting server (pm2)"
 pm2 restart inventory-server 2>/dev/null || pm2 start ecosystem.config.cjs
