@@ -200,10 +200,19 @@ api.get("/products", auth.requireDevice, h(async (req, res) => {
       .all(archived ? 1 : 0, limit, offset);
   }
 
-  /* card enrichment: one query for all listed products' first-photo-per-color */
+  /* card enrichment: one query for all listed products' first-photo-per-color,
+   * plus sizes + per-variant stock so cards can drive a size dropdown */
+  type CardExtra = {
+    colorNames: string[];
+    colorIds: number[];
+    thumbs: string[];
+    sizes: shared.SizeDef[];
+    variantQty: Record<string, number>;
+  };
   const ids = rows.map((r: any) => r.id as string);
-  const thumbsById = new Map<string, { colorNames: string[]; thumbs: string[] }>();
-  for (const pid of ids) thumbsById.set(pid, { colorNames: [], thumbs: [] });
+  const thumbsById = new Map<string, CardExtra>();
+  for (const pid of ids)
+    thumbsById.set(pid, { colorNames: [], colorIds: [], thumbs: [], sizes: [], variantQty: {} });
   if (ids.length) {
     const placeholders = ids.map(() => "?").join(",");
     const colorRows = db
@@ -224,14 +233,28 @@ api.get("/products", auth.requireDevice, h(async (req, res) => {
       const entry = thumbsById.get(c.product_id);
       if (!entry) continue;
       entry.colorNames.push(c.name);
+      entry.colorIds.push(c.id);
       entry.thumbs.push(colorFirst.get(c.id) ?? "");
+    }
+    /* sizes + per-variant stock for the same products (card size dropdown) */
+    const sizeRows = db
+      .prepare(`SELECT product_id, id, label, price FROM sizes WHERE product_id IN (${placeholders}) ORDER BY sort, id`)
+      .all(...ids) as { product_id: string; id: number; label: string; price: number }[];
+    for (const s of sizeRows)
+      thumbsById.get(s.product_id)?.sizes.push({ id: s.id, label: s.label, price: s.price });
+    const variantRows = db
+      .prepare(`SELECT product_id, color_id, size_id, qty FROM variants WHERE product_id IN (${placeholders})`)
+      .all(...ids) as { product_id: string; color_id: number; size_id: number; qty: number }[];
+    for (const v of variantRows) {
+      const entry = thumbsById.get(v.product_id);
+      if (entry) entry.variantQty[`${v.color_id}|${v.size_id}`] = v.qty;
     }
   }
 
   res.json(
     rows.map((r: any) => ({
       ...toSummary(r),
-      ...(thumbsById.get(r.id) ?? { colorNames: [], thumbs: [] }),
+      ...(thumbsById.get(r.id) ?? { colorNames: [], colorIds: [], thumbs: [], sizes: [], variantQty: {} }),
     }))
   );
 }));

@@ -42,6 +42,12 @@ export interface ProductSummary {
   /** list-route only: first photo filename + name per color, in color order */
   colorNames?: string[];
   thumbs?: string[]; // photo filenames, one per color
+  /** list-route card extras: sizes with per-size price + per-variant stock, so
+   *  cards can show price for the chosen size and qty for chosen color+size.
+   *  colorIds[i] is the color id of colorNames[i]/thumbs[i]. */
+  sizes?: SizeDef[];
+  variantQty?: Record<string, number>; // "colorId|sizeId" -> stock
+  colorIds?: number[];
 }
 
 export interface ProductFull extends ProductSummary {
