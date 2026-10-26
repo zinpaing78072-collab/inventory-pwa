@@ -144,7 +144,7 @@ export default function Record() {
   };
 
   return (
-    <>
+    <div className="record-screen">
       <header className="head">
         <div className="head-top">
           <Link to="/" style={{ fontSize: 14 }}>
@@ -186,26 +186,32 @@ export default function Record() {
           const c = l.product.colors[l.ci];
           return (
             <div className="rec-line" key={`${l.product.id}:${l.ci}`}>
-              <button
-                className="rec-col"
-                title="Tap to change color"
-                onClick={() =>
-                  setLines((ls) =>
-                    ls.map((x, i) => (i === li ? { ...x, ci: (x.ci + 1) % x.product.colors.length } : x))
-                  )
-                }
-              >
+              <button className="rec-col" title="Tap to change color" onClick={() =>
+                setLines((ls) =>
+                  ls.map((x, i) => (i === li ? { ...x, ci: (x.ci + 1) % x.product.colors.length } : x))
+                )
+              }>
                 {c.photos[0] ? (
                   <img className="rec-thumb" src={photoUrlOf(c.photos[0].filename)} alt={c.name} />
                 ) : (
                   <span className="rec-thumb rec-noimg">No photo</span>
                 )}
-                <span className="colorpill" style={{ fontSize: 9.5 }}>
-                  {c.name} ›
-                </span>
               </button>
-              <div>
-                <div className="pn">{l.product.name}</div>
+              <div className="rec-mid">
+                <div className="pn-row">
+                  <span className="pn">{l.product.name}</span>
+                  <button
+                    className="rec-pill"
+                    title="Tap to change color"
+                    onClick={() =>
+                      setLines((ls) =>
+                        ls.map((x, i) => (i === li ? { ...x, ci: (x.ci + 1) % x.product.colors.length } : x))
+                      )
+                    }
+                  >
+                    {c.name} ›
+                  </button>
+                </div>
                 {l.product.sizes.map((s) => {
                   const key = `${c.id}|${s.id}`;
                   return (
@@ -362,7 +368,7 @@ export default function Record() {
           </>
         )}
       </div>
-    </>
+    </div>
   );
 }
 

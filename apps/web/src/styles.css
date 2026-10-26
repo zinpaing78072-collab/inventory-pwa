@@ -129,23 +129,22 @@ a { color: inherit; text-decoration: none; }
 .nav a.active, .nav button.active { color: var(--ink); font-weight: 600; }
 
 /* ---------- record-sale screen ---------- */
+.record-screen { padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px)); }
 .rec-line {
   display: grid;
-  grid-template-columns: 56px 1fr auto;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
   gap: 10px;
   padding: 10px 0;
   border-top: 1px solid var(--hairline);
 }
 .rec-line:first-of-type { border-top: 0; }
+.rec-mid { min-width: 0; }
 .rec-col {
   background: none;
   border: 0;
   padding: 0;
   cursor: pointer;
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-  align-content: start;
+  display: block;
   color: var(--muted);
 }
 .rec-thumb {
@@ -161,7 +160,20 @@ a { color: inherit; text-decoration: none; }
   background: var(--panel);
   font-size: 10px;
 }
-.rec-line .pn { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.pn-row { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.rec-line .pn { font-size: 13px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.rec-pill {
+  flex: none;
+  background: rgba(27, 26, 23, 0.62);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 0;
+  cursor: pointer;
+  margin-top: 1px;
+}
 .rec-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
 .rec-row .lab { min-width: 44px; }
 .rec-row .pr { color: var(--muted); font-size: 11px; }
@@ -205,12 +217,13 @@ a { color: inherit; text-decoration: none; }
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 0;
+  bottom: calc(56px + env(safe-area-inset-bottom, 0px)); /* sits above the bottom nav */
   width: min(560px, 100vw);
-  padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 10px 16px 10px;
   background: rgba(250, 250, 247, 0.95);
   backdrop-filter: blur(10px);
   border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
   z-index: 14;
   display: grid;
   gap: 7px;
