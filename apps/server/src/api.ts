@@ -345,16 +345,37 @@ api.post("/products/:id/archive", auth.requireDevice, h(async (req, res) => {
 
 api.delete("/products/:id", auth.requireDevice, h(async (req, res) => {
   const row = await productById(req.params.id);
-  const movementCount = (
-    db.prepare("SELECT COUNT(*) AS n FROM movements WHERE product_id = ?").get(row.id) as { n: number }
+  /* real sales must survive books — product with sales can only be archived */
+  const saleCount = (
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM sale_lines sl JOIN variants v ON v.id = sl.variant_id WHERE v.product_id = ?"
+      )
+      .get(row.id) as { n: number }
   ).n;
-  if (movementCount > 0) {
+  if (saleCount > 0) {
     throw new HttpError(
-      "This product has stock movement history — archive it instead (keeps the audit trail)",
+      "This product has sales records — archive it instead (sales history stays intact)",
       409
     );
   }
-  txn(() => db.prepare("DELETE FROM products WHERE id = ?").run(row.id));
+  /* deletable product: purge its stock-in/adjust movements too (they describe
+   * the product's life; once the product is gone they mean nothing), then let
+   * the cascade remove colors/sizes/variants/photo rows */
+  const files = db
+    .prepare("SELECT filename FROM photos WHERE color_id IN (SELECT id FROM colors WHERE product_id = ?)")
+    .all(row.id) as { filename: string }[];
+  txn(() => {
+    db.prepare("DELETE FROM movements WHERE product_id = ?").run(row.id);
+    db.prepare("DELETE FROM products WHERE id = ?").run(row.id);
+  });
+  for (const f of files) {
+    try {
+      unlinkSync(path.join(PHOTOS_DIR, f.filename));
+    } catch {
+      /* file already gone */
+    }
+  }
   res.json({ ok: true });
 }));
 

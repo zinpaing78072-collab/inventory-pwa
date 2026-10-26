@@ -213,11 +213,18 @@ export default function EditProduct() {
   };
 
   const doDelete = async () => {
-    if (!isEdit || !confirm("Delete this product and its history? This cannot be undone.")) return;
-    await api.deleteProduct(id!);
-    toast("Product deleted");
-    bump();
-    nav("/", { replace: true });
+    if (!isEdit || !confirm("Delete this product? This cannot be undone.")) return;
+    try {
+      await api.deleteProduct(id!);
+      toast("Product deleted");
+      bump();
+      nav("/", { replace: true });
+    } catch (e: unknown) {
+      const msg = String((e as Error).message ?? e);
+      toast(msg);
+      setErr(msg);
+      setBusy(false);
+    }
   };
 
   return (
