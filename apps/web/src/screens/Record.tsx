@@ -66,7 +66,7 @@ export default function Record() {
       .product(productId)
       .then((p) => {
         const first = p.sizes[0]?.id ? `${p.colors[0]?.id}|${p.sizes[0].id}` : "";
-        setLines([{ product: p, ci: 0, qty: first ? { [first]: 1 } : {}, added: first ? [first] : [] }]);
+        setLines([{ product: p, ci: 0, qty: {}, added: first ? [first] : [] }]);
       })
       .catch(() => setErr("Could not load that product"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -89,9 +89,10 @@ export default function Record() {
     }
     const first = p.sizes[0]?.id;
     const key = first && p.colors[ci] ? `${p.colors[ci].id}|${first}` : "";
+    /* rows open at 0 — the quantity is always a deliberate step */
     setLines((ls) => [
       ...ls,
-      { product: p, ci, qty: key ? { [key]: 1 } : {}, added: key ? [key] : [] },
+      { product: p, ci, qty: {}, added: key ? [key] : [] },
     ]);
     setAddOpen(false);
     setPickProduct(null);
@@ -100,7 +101,7 @@ export default function Record() {
   };
 
   /* pick a color from the "+ Add color…" dropdown: focus it and, if the product
-   * has no rows for it yet, open its first size at 1 */
+   * has no rows for it yet, open its first size at 0 */
   const addColorPick = (li: number, colorId: number) =>
     setLines((ls) =>
       ls.map((l, i) => {
@@ -115,10 +116,6 @@ export default function Record() {
           ...l,
           ci,
           added: colorStarted || !firstKey ? l.added : [...l.added, firstKey],
-          qty:
-            !colorStarted && firstKey
-              ? { ...l.qty, [firstKey]: Math.max(1, l.qty[firstKey] || 0) }
-              : l.qty,
         };
       })
     );
@@ -127,7 +124,7 @@ export default function Record() {
     setLines((ls) =>
       ls.map((l, i) =>
         i === li && key && !l.added.includes(key)
-          ? { ...l, added: [...l.added, key], qty: { ...l.qty, [key]: Math.max(1, l.qty[key] || 0) } }
+          ? { ...l, added: [...l.added, key], qty: { ...l.qty, [key]: 0 } }
           : l
       )
     );
