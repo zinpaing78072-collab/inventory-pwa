@@ -3,7 +3,7 @@ import type { Movement, ProductFull, Sale } from "@inv/shared";
 import { mmk, stockText } from "@inv/shared";
 import { api } from "../api";
 import { BottomSheet } from "./BottomSheet";
-import { dateShort } from "./util";
+import { dateShort, photoUrlOf } from "./util";
 
 /* ---------- image compression (client-side per hand-off §7) ---------- */
 
@@ -310,15 +310,29 @@ export function ReturnSheet({
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  /* same visual language as the record screen: one card per product, color
+   * chips switch which color's rows you're editing */
+  const [products, setProducts] = useState<Map<string, ProductFull> | null>(null);
+  const [ciByProduct, setCiByProduct] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    void Promise.all(
+      [...new Set(sale.lines.map((l) => l.productId))].map((id) =>
+        api.product(id).catch(() => null)
+      )
+    ).then((ps) => setProducts(new Map(ps.filter((p): p is ProductFull => !!p).map((p) => [p.id, p]))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sale.id]);
 
   const remaining = (lineId: number, qty: number, returned: number) => qty - returned;
+  const pieces = Object.values(sel).reduce((a, b) => a + b, 0);
 
   const confirm = async () => {
     const lines = Object.entries(sel)
       .filter(([, q]) => q > 0)
       .map(([lineId, q]) => ({ saleLineId: Number(lineId), qty: q }));
     if (lines.length === 0) {
-      setErr("Nothing to return");
+      setErr("Nothing to return — raise a quantity first");
       return;
     }
     setErr("");
@@ -333,6 +347,17 @@ export function ReturnSheet({
     }
   };
 
+  /* group the sale's lines by product */
+  const groups = Object.values(
+    sale.lines.reduce<Record<string, { productId: string; name: string; lines: Sale["lines"] }>>(
+      (acc, l) => {
+        (acc[l.productId] ??= { productId: l.productId, name: l.productName, lines: [] }).lines.push(l);
+        return acc;
+      },
+      {}
+    )
+  );
+
   return (
     <>
       <div className="sheetmask" onClick={onClose} />
@@ -342,35 +367,74 @@ export function ReturnSheet({
         <div className="sub">
           Sale to {sale.customerName || "Walk-in"} · {dateShort(sale.at)}
         </div>
-        {sale.lines.map((l) => {
-          const remain = remaining(l.id, l.qty, l.returned ?? 0);
+
+        {groups.map((g) => {
+          const p = products?.get(g.productId);
+          const colorNames = [...new Set(g.lines.map((l) => l.colorName))];
+          const ci = ciByProduct[g.productId] ?? 0;
+          const activeColor = colorNames[ci] ?? colorNames[0];
+          const colorIdx = colorNames.indexOf(activeColor);
           return (
-            <div key={l.id} className="qty-edit-row">
-              <span className="lab" style={{ fontSize: 12.5 }}>
-                {l.productName.slice(0, 14)}
-                <br />
-                <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 10.5 }}>
-                  {l.colorName} {l.sizeLabel} · {mmk(l.price)}
-                </span>
-              </span>
-              <span className="pr" style={{ textAlign: "center" }}>
-                {remain > 0 ? `${remain} returnable` : "fully returned"}
-              </span>
-              <Stepper
-                value={sel[l.id] ?? 0}
-                max={remain}
-                onChange={(v) => setSel((prev) => ({ ...prev, [l.id]: v }))}
-              />
+            <div className="rec-card" key={g.productId}>
+              <div className="rec-line headless">
+                {p?.colors.find((c) => c.name === colorNames[colorIdx])?.photos[0] ||
+                p?.colors[0]?.photos[0] ? (
+                  <img
+                    className="rec-thumb"
+                    src={photoUrlOf(
+                      (p!.colors.find((c) => c.name === colorNames[colorIdx]) ?? p!.colors[0]).photos[0].filename
+                    )}
+                    alt={g.name}
+                  />
+                ) : (
+                  <span className="rec-thumb rec-noimg">No photo</span>
+                )}
+                <div className="rec-mid">
+                  <div className="pn-row">
+                    <span className="pn">{p?.name ?? g.name}</span>
+                  </div>
+                  {colorNames.length > 1 && (
+                    <div className="rec-chips">
+                      {colorNames.map((cn, i) => (
+                        <button
+                          key={cn}
+                          className={"color-chip" + (i === colorIdx ? " on" : "")}
+                          onClick={() => setCiByProduct((m) => ({ ...m, [g.productId]: i }))}
+                        >
+                          {cn}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {g.lines
+                    .filter((l) => l.colorName === activeColor)
+                    .map((l) => {
+                      const remain = remaining(l.id, l.qty, l.returned ?? 0);
+                      return (
+                        <div className="rec-row" key={l.id}>
+                          <span className="lab">{l.sizeLabel}</span>
+                          <span className="pr">{remain > 0 ? `${remain} of ${l.qty} returnable` : "fully returned"}</span>
+                          <Stepper
+                            value={sel[l.id] ?? 0}
+                            max={remain}
+                            onChange={(v) => setSel((prev) => ({ ...prev, [l.id]: v }))}
+                          />
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
             </div>
           );
         })}
-        <div className="frow">
+
+        <div className="frow" style={{ marginTop: 12 }}>
           <label>Reason (optional)</label>
           <input placeholder="Wrong size, changed mind…" value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
         {err && <div className="err">{err}</div>}
         <button className="btn primary" style={{ width: "100%", marginTop: 14 }} onClick={confirm} disabled={busy}>
-          {busy ? "Saving…" : "Confirm return"}
+          {busy ? "Saving…" : `Confirm return${pieces ? ` · ${pieces} pc${pieces === 1 ? "" : "s"}` : ""}`}
         </button>
       </div>
     </>
