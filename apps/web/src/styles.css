@@ -35,6 +35,10 @@ button {
 input, textarea, select {
   font: inherit;
   color: var(--ink);
+  /* iOS Safari auto-zooms the page when a focused control renders < 16px.
+     Force 16px+ on every form control so focus never zooms; !important wins
+     over the smaller per-context sizes (sizeselect, discbox, qty rows…). */
+  font-size: max(16px, 1em) !important;
 }
 img { display: block; }
 a { color: inherit; text-decoration: none; }
