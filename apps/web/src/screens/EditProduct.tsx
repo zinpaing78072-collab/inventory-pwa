@@ -310,16 +310,43 @@ export default function EditProduct() {
                   borderRadius: 10,
                   display: "grid",
                   placeItems: "center",
+                  alignContent: "center",
+                  gap: 4,
+                  color: "var(--muted)",
+                  fontSize: 18,
+                  cursor: "pointer",
+                }}
+              >
+                📷
+                <span style={{ fontSize: 9 }}>Camera</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  hidden
+                  onChange={(e) => void pickPhotos(c, e.target.files).then(() => (e.target.value = ""))}
+                />
+              </label>
+              <label
+                style={{
+                  width: 76,
+                  height: 95,
+                  border: "1px dashed var(--hairline)",
+                  borderRadius: 10,
+                  display: "grid",
+                  placeItems: "center",
+                  alignContent: "center",
+                  gap: 4,
                   color: "var(--muted)",
                   fontSize: 20,
                   cursor: "pointer",
                 }}
               >
-                +
+                ＋
+                <span style={{ fontSize: 9 }}>Gallery</span>
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   multiple
                   hidden
                   onChange={(e) => void pickPhotos(c, e.target.files).then(() => (e.target.value = ""))}
