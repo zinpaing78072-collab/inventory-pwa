@@ -5,10 +5,24 @@ import { api } from "../api";
 import { BottomSheet } from "./BottomSheet";
 import { dateShort } from "./util";
 
-/* ---------- image compression (client-side per hand-off §7: canvas -> ~1600px JPEG) ---------- */
+/* ---------- image compression (client-side per hand-off §7) ---------- */
 
-export async function compressImage(file: File): Promise<File> {
+/* WebKit (Safari, iOS home-screen apps) drops a photo's ICC color profile when
+ * the image is drawn through a canvas and re-encoded as JPEG — wide-gamut
+ * (Display P3) gallery photos come out washed out or straight grayscale.
+ * Camera shots are plain sRGB and survive, which is why this used to hit only
+ * gallery picks. On Apple devices we therefore upload gallery photos as the
+ * original bytes (the iOS picker delivers ready JPEGs) and only canvas-compress
+ * forced camera captures. Other engines re-encode profile-safe. */
+const IS_APPLE_UA = (() => {
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  if (/iP(hone|od|ad)/.test(ua)) return true;
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1; // iPadOS desktop UA
+})();
+
+export async function compressImage(file: File, opts?: { force?: boolean }): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
+  if (!opts?.force && IS_APPLE_UA) return file; // keep original bytes + ICC profile
   try {
     const bitmap = await createImageBitmap(file);
     const long = Math.max(bitmap.width, bitmap.height);

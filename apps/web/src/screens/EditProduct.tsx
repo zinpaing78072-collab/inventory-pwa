@@ -71,12 +71,16 @@ export default function EditProduct() {
 
   /* ---------------- photos ---------------- */
 
-  const pickPhotos = async (draftColor: DraftColor, files: FileList | null) => {
+  const pickPhotos = async (
+    draftColor: DraftColor,
+    files: FileList | null,
+    opts?: { force?: boolean }
+  ) => {
     if (!files?.length) return;
     setColors((cs) => cs.map((c) => (c.key === draftColor.key ? { ...c, uploading: true } : c)));
     try {
       for (const raw of Array.from(files)) {
-        const compressed = await compressImage(raw);
+        const compressed = await compressImage(raw, opts);
         let filename: string;
         if (isEdit && draftColor.colorId) {
           const up = await api.uploadPhoto(draftColor.colorId, compressed);
@@ -324,7 +328,9 @@ export default function EditProduct() {
                   accept="image/*"
                   capture="environment"
                   hidden
-                  onChange={(e) => void pickPhotos(c, e.target.files).then(() => (e.target.value = ""))}
+                  onChange={(e) =>
+                    void pickPhotos(c, e.target.files, { force: true }).then(() => (e.target.value = ""))
+                  }
                 />
               </label>
               <label

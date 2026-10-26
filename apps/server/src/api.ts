@@ -29,7 +29,7 @@ const upload = multer({
       cb(null, `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.jpg`);
     },
   }),
-  limits: { fileSize: 8 * 1024 * 1024 },
+  limits: { fileSize: 16 * 1024 * 1024 }, // gallery picks on Apple upload originals (with ICC profile)
 });
 
 /* ---------- helpers ---------- */
