@@ -8,6 +8,7 @@ import Home from "./screens/Home";
 import ProductDetail from "./screens/ProductDetail";
 import EditProduct from "./screens/EditProduct";
 import Customers from "./screens/Customers";
+import Record from "./screens/Record";
 import Settings from "./screens/Settings";
 import { BottomNav } from "./components/BottomNav";
 
@@ -168,6 +169,7 @@ export default function App() {
           <Route path="/products/:id" element={<ProductDetail />} />
           <Route path="/products/:id/edit" element={<EditProduct />} />
           <Route path="/customers" element={<Customers />} />
+          <Route path="/sell" element={<Record />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Home />} />
         </Routes>

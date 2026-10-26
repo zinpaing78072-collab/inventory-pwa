@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Customer, Movement, ProductFull, Sale } from "@inv/shared";
+import type { Movement, ProductFull, Sale } from "@inv/shared";
 import { mmk, stockText } from "@inv/shared";
 import { api } from "../api";
 import { BottomSheet } from "./BottomSheet";
@@ -56,7 +56,7 @@ function qtyOf(p: ProductFull, key: VariantKey): number {
 const sizePrice = (p: ProductFull, sizeId: number): number =>
   p.sizes.find((s) => s.id === sizeId)?.price ?? 0;
 
-function Stepper({
+export function Stepper({
   value,
   onChange,
   min = 0,
@@ -80,241 +80,22 @@ function Stepper({
   );
 }
 
-/* ---------- customer picker (used by sale sheet) ---------- */
-
-function CustomerFields({
-  customerId,
-  name,
-  phone1,
-  phone2,
-  notes,
-  set,
-}: {
-  customerId: string | null;
-  name: string;
-  phone1: string;
-  phone2: string;
-  notes: string;
-  set: (v: { customerId?: string | null; name?: string; phone1?: string; phone2?: string; notes?: string }) => void;
-}) {
-  const [matches, setMatches] = useState<Customer[] | null>(null);
-  const debounce = useRef<number>(undefined);
-
-  useEffect(() => {
-    const q = name.trim() || phone1.trim();
-    if (q.length < 2) {
-      setMatches(null);
-      return;
-    }
-    window.clearTimeout(debounce.current);
-    debounce.current = window.setTimeout(() => {
-      api
-        .customers(q)
-        .then((cs) => setMatches(cs.filter((c) => c.id !== customerId).slice(0, 4)))
-        .catch(() => setMatches(null));
-    }, 200);
-    return () => window.clearTimeout(debounce.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, phone1]);
-
-  return (
-    <>
-      <div className="frow">
-        <label>Customer name</label>
-        <input placeholder="For the sales book" value={name} onChange={(e) => set({ name: e.target.value, customerId: null })} />
-      </div>
-      {matches && matches.length > 0 && (
-        <div className="chips" style={{ marginTop: 8 }}>
-          {matches.map((c) => (
-            <button
-              key={c.id}
-              className="custchip"
-              onClick={() =>
-                set({ customerId: c.id, name: c.name, phone1: c.phone1, phone2: c.phone2, notes: c.notes })
-              }
-            >
-              <span className="av">{c.name.slice(0, 2).toUpperCase()}</span>
-              <span>
-                <span className="cn">{c.name}</span>
-                <br />
-                <span className="cp">{c.phone1 || c.phone2}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="frow f2">
-        <div>
-          <label>Phone 1</label>
-          <input inputMode="tel" placeholder="09…" value={phone1} onChange={(e) => set({ phone1: e.target.value, customerId: null })} />
-        </div>
-        <div>
-          <label>Phone 2</label>
-          <input inputMode="tel" value={phone2} onChange={(e) => set({ phone2: e.target.value, customerId: null })} />
-        </div>
-      </div>
-      <div className="frow">
-        <label>Customer notes (optional)</label>
-        <input placeholder="Regular, prefers dresses, delivery address…" value={notes} onChange={(e) => set({ notes: e.target.value })} />
-      </div>
-    </>
-  );
-}
-
-/* ---------- record sale ---------- */
-
-export function RecordSaleSheet({
-  product,
-  onClose,
-  onDone,
-}: {
-  product: ProductFull;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [colorId, setColorId] = useState<number>(product.colors[0]?.id ?? 0);
-  const [sel, setSel] = useState<Record<VariantKey, number>>({});
-  const [customerId, setCustomerId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [phone1, setPhone1] = useState("");
-  const [phone2, setPhone2] = useState("");
-  const [notes, setNotes] = useState("");
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const lines = useMemo(() => {
-    const out: { key: VariantKey; sizeLabel: string; qty: number; price: number; variantId: number }[] = [];
-    for (const [key, q] of Object.entries(sel)) {
-      if (q <= 0) continue;
-      const sizeId = Number(key.split("|")[1]);
-      const vid = variantIdOf(product, key);
-      if (!vid) continue;
-      out.push({
-        key,
-        sizeLabel: product.sizes.find((s) => s.id === sizeId)?.label ?? "?",
-        qty: q,
-        price: sizePrice(product, sizeId),
-        variantId: vid,
-      });
-    }
-    return out;
-  }, [sel, product]);
-
-  const total = lines.reduce((a, l) => a + l.qty * l.price, 0);
-
-  const confirm = async () => {
-    if (lines.length === 0) {
-      setErr("Add at least one item");
-      return;
-    }
-    setErr("");
-    setBusy(true);
-    try {
-      await api.recordSale({
-        customerId,
-        customerName: name.trim(),
-        phone1: phone1.trim(),
-        phone2: phone2.trim(),
-        customerNotes: notes.trim(),
-        lines: lines.map((l) => ({ variantId: l.variantId, qty: l.qty })),
-      });
-      onDone();
-      onClose();
-    } catch (e: unknown) {
-      setErr(String((e as Error).message ?? e));
-      setBusy(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="sheetmask" onClick={onClose} />
-      <div className="sheet">
-        <div className="grab" />
-        <h3>Record sale</h3>
-        <div className="sub">{product.name}</div>
-
-        {product.colors.length > 1 && (
-          <div className="chips" style={{ marginTop: 10 }}>
-            {product.colors.map((c) => (
-              <button
-                key={c.id}
-                className="custchip"
-                style={c.id === colorId ? { borderColor: "var(--ink)", fontWeight: 620 } : undefined}
-                onClick={() => setColorId(c.id)}
-              >
-                <span className="av">{c.name.slice(0, 2).toUpperCase()}</span>
-                <span className="cn">{c.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="frow">
-          <label>Quantity per size (stock shown in grey)</label>
-          {product.sizes.map((s) => {
-            const key = `${colorId}|${s.id}`;
-            const stock = qtyOf(product, key);
-            const chosen = sel[key] ?? 0;
-            return (
-              <div key={s.id} className="qty-edit-row">
-                <span className="lab">{s.label}</span>
-                <span className="pr">{mmk(s.price)}</span>
-                <span className="pr" style={{ textAlign: "center" }}>
-                  {stockText(stock)}
-                </span>
-                <Stepper
-                  value={chosen}
-                  min={0}
-                  max={stock}
-                  onChange={(v) => setSel((prev) => ({ ...prev, [key]: v }))}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="sale-total">
-          <span>Total</span>
-          <span>{mmk(total)}</span>
-        </div>
-
-        <CustomerFields
-          customerId={customerId}
-          name={name}
-          phone1={phone1}
-          phone2={phone2}
-          notes={notes}
-          set={(v) => {
-            if (v.customerId !== undefined) setCustomerId(v.customerId);
-            if (v.name !== undefined) setName(v.name);
-            if (v.phone1 !== undefined) setPhone1(v.phone1);
-            if (v.phone2 !== undefined) setPhone2(v.phone2);
-            if (v.notes !== undefined) setNotes(v.notes);
-          }}
-        />
-
-        {err && <div className="err">{err}</div>}
-        <button className="btn primary" style={{ width: "100%", marginTop: 14 }} onClick={confirm} disabled={busy}>
-          {busy ? "Saving…" : `Confirm sale${total ? ` · ${mmk(total)}` : ""}`}
-        </button>
-      </div>
-    </>
-  );
-}
 
 /* ---------- stock in ---------- */
 
 export function StockInSheet({
   product,
+  initialColorId,
   onClose,
   onDone,
 }: {
   product: ProductFull;
+  /** color shown on the detail screen — preselect its chips */
+  initialColorId?: number;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [colorId, setColorId] = useState<number>(product.colors[0]?.id ?? 0);
+  const [colorId, setColorId] = useState<number>(initialColorId ?? product.colors[0]?.id ?? 0);
   const [sel, setSel] = useState<Record<VariantKey, number>>({});
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
@@ -405,14 +186,17 @@ export function StockInSheet({
 
 export function AdjustSheet({
   product,
+  initialColorId,
   onClose,
   onDone,
 }: {
   product: ProductFull;
+  /** color shown on the detail screen — preselect its chips */
+  initialColorId?: number;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [colorId, setColorId] = useState<number>(product.colors[0]?.id ?? 0);
+  const [colorId, setColorId] = useState<number>(initialColorId ?? product.colors[0]?.id ?? 0);
   const [sel, setSel] = useState<Record<VariantKey, number>>({});
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");

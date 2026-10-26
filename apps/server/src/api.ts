@@ -620,25 +620,31 @@ api.post("/sales", auth.requireDevice, h(async (req, res) => {
     ? req.body.lines.map((l: any) => ({ variantId: reqInt(l.variantId, "variantId"), qty: reqInt(l.qty, "qty") }))
     : [];
   if (lines.length === 0) throw new HttpError("Empty sale", 400);
+  const discount = Math.max(0, reqInt(req.body?.discount ?? 0, "discount") || 0);
 
   const agg = new Map<number, number>();
   for (const l of lines) agg.set(l.variantId, (agg.get(l.variantId) ?? 0) + l.qty);
 
   const saleId = newId();
   txn(() => {
-    // stock check first — all-or-nothing
+    // stock check first — all-or-nothing; also totals the bill at true prices
+    let itemsTotal = 0;
     for (const [vid, q] of agg) {
       const v = variantById(vid);
       if (v.qty < q) {
         const n = namesFor(v);
         throw new HttpError(`Not enough stock: ${n.productName} ${n.colorName} ${n.sizeLabel}`, 409);
       }
+      itemsTotal += q * (db.prepare("SELECT price FROM sizes WHERE id = ?").get(v.size_id) as { price: number }).price;
+    }
+    if (discount > itemsTotal) {
+      throw new HttpError(`Discount (Ks ${discount.toLocaleString("en-US")}) exceeds the bill total (Ks ${itemsTotal.toLocaleString("en-US")})`, 400);
     }
     const cust = findOrCreateCustomer(req.body ?? {});
     const at = Date.now();
     db.prepare(
-      "INSERT INTO sales (id, customer_id, customer_name, customer_phone, customer_notes, at) VALUES (?,?,?,?,?,?)"
-    ).run(saleId, cust.id || null, cust.name, cust.phone, str(req.body?.customerNotes), at);
+      "INSERT INTO sales (id, customer_id, customer_name, customer_phone, customer_notes, discount, at) VALUES (?,?,?,?,?,?,?)"
+    ).run(saleId, cust.id || null, cust.name, cust.phone, str(req.body?.customerNotes), discount, at);
 
     const lineStmt = db.prepare(
       `INSERT INTO sale_lines
@@ -665,6 +671,7 @@ async function getSale(id: string): Promise<shared.Sale | undefined> {
   if (!row) return undefined;
   const lines = db.prepare("SELECT * FROM sale_lines WHERE sale_id = ?").all(id) as any[];
   const total = lines.reduce((a, l) => a + l.qty * l.price, 0);
+  const discount = Math.max(0, row.discount ?? 0);
   const returnedQty = lines.reduce((a, l) => a + l.returned, 0);
   return {
     id: row.id,
@@ -674,6 +681,8 @@ async function getSale(id: string): Promise<shared.Sale | undefined> {
     customerNotes: row.customer_notes ?? "",
     at: row.at,
     total,
+    discount,
+    payable: total - discount,
     returnedQty,
     lines: lines.map((l) => ({
       id: l.id,

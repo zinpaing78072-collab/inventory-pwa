@@ -127,7 +127,7 @@ function CustomerSheet({
   onReturn: (sale: Sale) => void;
 }) {
   const c = data.customer;
-  const grand = data.sales.reduce((a, s) => a + s.total, 0);
+  const grand = data.sales.reduce((a, s) => a + (s.payable ?? s.total), 0);
   return (
     <>
       <div className="sheetmask" onClick={onClose} />

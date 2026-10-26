@@ -1,0 +1,448 @@
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import type { Customer, ProductFull, ProductSummary, SaleInput } from "@inv/shared";
+import { mmk } from "@inv/shared";
+import { api } from "../api";
+import { useApp } from "../App";
+import { Stepper } from "../components/actions";
+import { photoUrlOf } from "../components/util";
+
+/* Record screen (route /sell): one customer, many product lines in one bill,
+ * one whole-bill discount, instant commit (replaces the per-product
+ * RecordSaleSheet; approved prototype: record.html). Arriving from a product's
+ * "Record sale" button preloads that product with its first color chosen. */
+
+interface Line {
+  product: ProductFull;
+  ci: number; // which color of this product is in the bill
+  qty: Record<number, number>; // sizeId -> units
+}
+
+function lineTotal(l: Line): number {
+  return l.product.sizes.reduce((a, s) => a + (l.qty[s.id] || 0) * s.price, 0);
+}
+function linePieces(l: Line): number {
+  return Object.values(l.qty).reduce((a, b) => a + b, 0);
+}
+
+export default function Record() {
+  const nav = useNavigate();
+  const loc = useLocation();
+  const [params] = useSearchParams();
+  const { toast } = useApp();
+
+  const [lines, setLines] = useState<Line[]>([]);
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [phone1, setPhone1] = useState("");
+  const [phone2, setPhone2] = useState("");
+  const [notes, setNotes] = useState("");
+  const [discount, setDiscount] = useState(0);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const [pickProduct, setPickProduct] = useState<ProductFull | null>(null); // sheet: color stage
+  const [sums, setSums] = useState<ProductSummary[] | null>(null); // sheet: search stage
+  const [addOpen, setAddOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const searchDebounce = useRef<number | undefined>(undefined);
+
+  /* preload the product we came from (Record Sale button on detail) */
+  const productId = params.get("product") ?? "";
+  useEffect(() => {
+    if (!productId) return;
+    void api
+      .product(productId)
+      .then((p) => setLines([{ product: p, ci: 0, qty: {} }]))
+      .catch(() => setErr("Could not load that product"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* debounced search inside the add-product sheet */
+  useEffect(() => {
+    if (!addOpen || pickProduct) return; // closed, or sheet is in color stage
+    window.clearTimeout(searchDebounce.current);
+    searchDebounce.current = window.setTimeout(async () => {
+      setSums(await api.products(q).catch(() => []));
+    }, 160);
+    return () => window.clearTimeout(searchDebounce.current);
+  }, [q, pickProduct, addOpen]);
+
+  const addLine = (p: ProductFull, ci: number) => {
+    if (lines.some((l) => l.product.id === p.id && l.ci === ci)) {
+      toast("That color is already in the bill — raise its quantity");
+      return;
+    }
+    const firstSize = p.sizes[0]?.id;
+    setLines((ls) => [...ls, { product: p, ci, qty: firstSize ? { [firstSize]: 1 } : {} }]);
+    setPickProduct(null);
+    setSums(null);
+  };
+
+  const setQty = (li: number, sizeId: number, v: number) =>
+    setLines((ls) =>
+      ls.map((l, i) => (i === li ? { ...l, qty: { ...l.qty, [sizeId]: Math.max(0, v) } } : l))
+    );
+
+  const closeAdd = () => {
+    setAddOpen(false);
+    setPickProduct(null);
+  };
+
+  const removeLine = (li: number) => setLines((ls) => ls.filter((_, i) => i !== li));
+
+  const itemsTotal = lines.reduce((a, l) => a + lineTotal(l), 0);
+  const pieces = lines.reduce((a, l) => a + linePieces(l), 0);
+  const payable = Math.max(0, itemsTotal - discount);
+
+  const confirm = async () => {
+    const flat: SaleInput["lines"] = [];
+    for (const l of lines) {
+      const c = l.product.colors[l.ci];
+      for (const s of l.product.sizes) {
+        const qty = l.qty[s.id] || 0;
+        if (qty <= 0) continue;
+        const vid = l.product.variantIds[`${c.id}|${s.id}`];
+        if (!vid) continue;
+        flat.push({ variantId: vid, qty });
+      }
+    }
+    if (flat.length === 0) {
+      setErr("Add at least one item and raise its quantity");
+      return;
+    }
+    if (discount > itemsTotal) {
+      setErr(`Discount (Ks ${discount.toLocaleString("en-US")}) exceeds the bill total (Ks ${itemsTotal.toLocaleString("en-US")})`);
+      return;
+    }
+    setErr("");
+    setBusy(true);
+    try {
+      const sale = await api.recordSale({
+        customerId,
+        customerName: name.trim(),
+        phone1: phone1.trim(),
+        phone2: phone2.trim(),
+        customerNotes: notes.trim(),
+        discount,
+        lines: flat,
+      });
+      toast(`Sale recorded · ${mmk(sale.payable)}`);
+      const from = (loc.state as { from?: string } | null)?.from;
+      nav(from ?? "/", { replace: true });
+    } catch (e: unknown) {
+      /* stock may have shifted underneath us — re-pull every product in the bill */
+      setBusy(false);
+      setErr(String((e as Error).message ?? e));
+      void (async () => {
+        const pairs = await Promise.all(
+          lines.map(async (l) => ({ fresh: await api.product(l.product.id).catch(() => l.product), ci: l.ci }))
+        );
+        setLines(pairs.map(({ fresh, ci }) => ({ product: fresh, ci, qty: {} })));
+      })();
+    }
+  };
+
+  return (
+    <>
+      <header className="head">
+        <div className="head-top">
+          <Link to="/" style={{ fontSize: 14 }}>
+            ‹ Products
+          </Link>
+          <div className="wordmark">
+            Record sale
+            <small>one customer · one bill</small>
+          </div>
+        </div>
+      </header>
+
+      {/* customer */}
+      <div className="chips-label">Customer</div>
+      <div className="card">
+        <CustomerFields
+          customerId={customerId}
+          name={name}
+          phone1={phone1}
+          phone2={phone2}
+          notes={notes}
+          set={(v) => {
+            if (v.customerId !== undefined) setCustomerId(v.customerId);
+            if (v.name !== undefined) setName(v.name);
+            if (v.phone1 !== undefined) setPhone1(v.phone1);
+            if (v.phone2 !== undefined) setPhone2(v.phone2);
+            if (v.notes !== undefined) setNotes(v.notes);
+          }}
+        />
+      </div>
+
+      {/* items */}
+      <div className="chips-label">Items</div>
+      <div className="card">
+        {lines.length === 0 && (
+          <div className="dim">Nothing in the bill yet — add a product below.</div>
+        )}
+        {lines.map((l, li) => {
+          const c = l.product.colors[l.ci];
+          return (
+            <div className="rec-line" key={`${l.product.id}:${l.ci}`}>
+              <button
+                className="rec-col"
+                title="Tap to change color"
+                onClick={() =>
+                  setLines((ls) =>
+                    ls.map((x, i) => (i === li ? { ...x, ci: (x.ci + 1) % x.product.colors.length } : x))
+                  )
+                }
+              >
+                {c.photos[0] ? (
+                  <img className="rec-thumb" src={photoUrlOf(c.photos[0].filename)} alt={c.name} />
+                ) : (
+                  <span className="rec-thumb rec-noimg">No photo</span>
+                )}
+                <span className="colorpill" style={{ fontSize: 9.5 }}>
+                  {c.name} ›
+                </span>
+              </button>
+              <div>
+                <div className="pn">{l.product.name}</div>
+                {l.product.sizes.map((s) => {
+                  const key = `${c.id}|${s.id}`;
+                  return (
+                    <div className="rec-row" key={s.id}>
+                      <span className="lab">{s.label}</span>
+                      <span className="pr">{mmk(s.price)}</span>
+                      <Stepper
+                        value={l.qty[s.id] || 0}
+                        max={l.product.qty[key] ?? 0}
+                        onChange={(v) => setQty(li, s.id, v)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="rec-sumslot">
+                <div className="amt">{mmk(lineTotal(l))}</div>
+                <button className="rec-rm" onClick={() => removeLine(li)}>
+                  ✕
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        <button
+          className="btn small"
+          style={{ marginTop: 10, width: "100%" }}
+          onClick={() => {
+            setAddOpen(true);
+            setPickProduct(null);
+            setQ("");
+          }}
+        >
+          ＋ Add product
+        </button>
+      </div>
+
+      {/* discount */}
+      <div className="chips-label">Discount</div>
+      <div className="card">
+        <div className="disc-row">
+          <label>
+            Less off this bill (Ks)
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>applied once, after all items</div>
+          </label>
+          <div className="discbox">
+            <span className="ks">− Ks</span>
+            <input
+              inputMode="numeric"
+              value={discount || ""}
+              placeholder="0"
+              onChange={(e) => setDiscount(Math.max(0, Number(e.target.value.replace(/\D/g, "")) || 0))}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* summary */}
+      <div className="chips-label">Summary</div>
+      <div className="card">
+        <div className="rec-sumrow">
+          <span>Items ({pieces} pcs)</span>
+          <span>{mmk(itemsTotal)}</span>
+        </div>
+        <div className="rec-sumrow">
+          <span>Discount</span>
+          <span>− {mmk(discount)}</span>
+        </div>
+        <div className="rec-pay">
+          <span>Payable</span>
+          <span>{mmk(payable)}</span>
+        </div>
+      </div>
+
+      {/* note + confirm bar */}
+      <div className="bar">
+        <input
+          className="note"
+          placeholder="Note for this sale (optional) — delivery, occasion…"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+        {err && <div className="err">{err}</div>}
+        <button className="btn primary" onClick={confirm} disabled={busy}>
+          {busy ? "Saving…" : `Confirm sale · ${mmk(payable)}`}
+        </button>
+      </div>
+
+      {/* add-product sheet */}
+      <div className="sheetmask" style={{ display: addOpen ? "block" : "none" }} onClick={closeAdd} />
+      <div className="sheet" style={{ display: addOpen ? "block" : "none" }}>
+        <div className="grab" />
+        {pickProduct ? (
+          <>
+            <h3>{pickProduct.name}</h3>
+            <div className="sub">Which color?</div>
+            <div className="chips" style={{ marginTop: 10 }}>
+              {pickProduct.colors.map((c, ci) => (
+                <button
+                  key={c.id}
+                  className="custchip"
+                  onClick={() => addLine(pickProduct, ci)}
+                >
+                  {c.photos[0] && <img className="chipthumb" src={photoUrlOf(c.photos[0].filename)} alt="" />}
+                  <span className="cn">{c.name}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <h3>Add product</h3>
+            <input
+              className="ssearch"
+              autoFocus
+              placeholder="Search brand, name, Burmese…"
+              value={q}
+              autoComplete="off"
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <div style={{ maxHeight: "46vh", overflowY: "auto" }}>
+              {(sums ?? []).map((s) => (
+                <button
+                  className="pick-row"
+                  key={s.id}
+                  onClick={async () => {
+                    try {
+                      setPickProduct(await api.product(s.id));
+                    } catch (e: unknown) {
+                      toast(String((e as Error).message ?? e));
+                    }
+                  }}
+                >
+                  <span
+                    className="pick-thumb"
+                    style={{ background: "var(--panel)" }}
+                  >
+                    {s.thumbs?.[0] ? <img src={photoUrlOf(s.thumbs[0])} alt="" /> : "▦"}
+                  </span>
+                  <span>
+                    <span className="pick-name">{s.name}</span>
+                    <br />
+                    <span className="pick-meta">
+                      {s.brand}
+                      {s.type ? ` · ${s.type}` : ""}
+                      {s.minPrice > 0 ? ` · ${mmk(s.minPrice)}` : ""}
+                    </span>
+                  </span>
+                  <span className="chev">›</span>
+                </button>
+              ))}
+              {sums?.length === 0 && <div className="sub">No products match.</div>}
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* Same interface as the old sheet's customer block: type a name, matches from the
+ * customers book appear, picking one fills phones + notes. */
+function CustomerFields({
+  customerId,
+  name,
+  phone1,
+  phone2,
+  notes,
+  set,
+}: {
+  customerId: string | null;
+  name: string;
+  phone1: string;
+  phone2: string;
+  notes: string;
+  set: (v: { customerId?: string | null; name?: string; phone1?: string; phone2?: string; notes?: string }) => void;
+}) {
+  const [matches, setMatches] = useState<Customer[] | null>(null);
+  const debounce = useRef<number>(undefined);
+
+  useEffect(() => {
+    const q = name.trim() || phone1.trim();
+    if (q.length < 2) {
+      setMatches(null);
+      return;
+    }
+    window.clearTimeout(debounce.current);
+    debounce.current = window.setTimeout(() => {
+      api
+        .customers(q)
+        .then((cs) => setMatches(cs.filter((c) => c.id !== customerId).slice(0, 4)))
+        .catch(() => setMatches(null));
+    }, 200);
+    return () => window.clearTimeout(debounce.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, phone1]);
+
+  return (
+    <>
+      <div className="frow">
+        <label>Customer name</label>
+        <input placeholder="For the sales book" value={name} onChange={(e) => set({ name: e.target.value, customerId: null })} />
+      </div>
+      {matches && matches.length > 0 && (
+        <div className="chips" style={{ marginTop: 8 }}>
+          {matches.map((c) => (
+            <button
+              key={c.id}
+              className="custchip"
+              onClick={() =>
+                set({ customerId: c.id, name: c.name, phone1: c.phone1, phone2: c.phone2, notes: c.notes })
+              }
+            >
+              <span className="av">{c.name.slice(0, 2).toUpperCase()}</span>
+              <span>
+                <span className="cn">{c.name}</span>
+                <br />
+                <span className="cp">{c.phone1 || c.phone2}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="frow f2">
+        <div>
+          <label>Phone 1</label>
+          <input inputMode="tel" placeholder="09…" value={phone1} onChange={(e) => set({ phone1: e.target.value, customerId: null })} />
+        </div>
+        <div>
+          <label>Phone 2</label>
+          <input inputMode="tel" value={phone2} onChange={(e) => set({ phone2: e.target.value, customerId: null })} />
+        </div>
+      </div>
+      <div className="frow">
+        <label>Customer notes (optional)</label>
+        <input placeholder="Regular, prefers dresses, delivery address…" value={notes} onChange={(e) => set({ notes: e.target.value })} />
+      </div>
+    </>
+  );
+}

@@ -19,7 +19,7 @@ db.exec("PRAGMA journal_mode = WAL");
 db.exec("PRAGMA foreign_keys = ON");
 db.exec("PRAGMA busy_timeout = 5000");
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function migrate(): void {
   const dbv = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
@@ -141,6 +141,16 @@ export function migrate(): void {
     ).map((c) => c.name);
     if (!salesCols.includes("customer_notes")) {
       db.exec("ALTER TABLE sales ADD COLUMN customer_notes TEXT NOT NULL DEFAULT ''");
+    }
+  }
+
+  /* v3: whole-bill discount stored on the sale (payable = items total - discount) */
+  if (dbv < 3) {
+    const salesCols = (
+      db.prepare("PRAGMA table_info(sales)").all() as { name: string }[]
+    ).map((c) => c.name);
+    if (!salesCols.includes("discount")) {
+      db.exec("ALTER TABLE sales ADD COLUMN discount INTEGER NOT NULL DEFAULT 0");
     }
   }
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);

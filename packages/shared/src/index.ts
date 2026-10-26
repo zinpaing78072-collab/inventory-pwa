@@ -92,7 +92,9 @@ export interface Sale {
   customerNotes: string; // snapshot of customer notes at sale time
   at: number;
   lines: SaleLine[];
-  total: number;
+  total: number; // items total before discount
+  discount: number; // whole-bill discount (Ks)
+  payable: number; // total - discount (what the customer owes)
   returnedQty: number;
 }
 
@@ -135,6 +137,8 @@ export interface SaleInput {
   customerName: string;
   phone1?: string;
   phone2?: string;
+  customerNotes?: string;
+  discount?: number; // whole-bill discount (Ks)
   lines: { variantId: number; qty: number }[];
 }
 

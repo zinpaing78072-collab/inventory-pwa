@@ -4,10 +4,10 @@ import type { ProductFull } from "@inv/shared";
 import { mmk, stockClass, stockText } from "@inv/shared";
 import { api } from "../api";
 import { useApp } from "../App";
-import { RecordSaleSheet, StockInSheet, AdjustSheet, HistorySheet } from "../components/actions";
+import { StockInSheet, AdjustSheet, HistorySheet } from "../components/actions";
 import { photoUrlOf } from "../components/util";
 
-type Sheet = "sale" | "stockin" | "adjust" | "history" | null;
+type Sheet = "stockin" | "adjust" | "history" | null;
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -108,7 +108,10 @@ export default function ProductDetail() {
         </div>
 
         <div className="actions">
-          <button className="btn primary" onClick={() => setSheet("sale")}>
+          <button
+            className="btn primary"
+            onClick={() => nav(`/sell?product=${p.id}`, { state: { from: `/products/${p.id}` } })}
+          >
             Record sale
           </button>
           <button className="btn" onClick={() => setSheet("stockin")}>
@@ -130,19 +133,10 @@ export default function ProductDetail() {
         )}
       </div>
 
-      {sheet === "sale" && (
-        <RecordSaleSheet
-          product={p}
-          onClose={() => setSheet(null)}
-          onDone={() => {
-            toast("Sale recorded");
-            void load();
-          }}
-        />
-      )}
       {sheet === "stockin" && (
         <StockInSheet
           product={p}
+          initialColorId={color?.id}
           onClose={() => setSheet(null)}
           onDone={() => {
             toast("Stock added");
@@ -153,6 +147,7 @@ export default function ProductDetail() {
       {sheet === "adjust" && (
         <AdjustSheet
           product={p}
+          initialColorId={color?.id}
           onClose={() => setSheet(null)}
           onDone={() => {
             toast("Stock adjusted");
