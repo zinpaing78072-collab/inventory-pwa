@@ -7,6 +7,10 @@ export function BottomNav() {
         <span className="ic">▦</span>
         Products
       </NavLink>
+      <NavLink to="/sales" className={({ isActive }) => (isActive ? "active" : "")}>
+        <span className="ic">≣</span>
+        Sales
+      </NavLink>
       <NavLink to="/customers" className={({ isActive }) => (isActive ? "active" : "")}>
         <span className="ic">☏</span>
         Customers

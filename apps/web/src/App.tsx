@@ -9,6 +9,7 @@ import ProductDetail from "./screens/ProductDetail";
 import EditProduct from "./screens/EditProduct";
 import Customers from "./screens/Customers";
 import Record from "./screens/Record";
+import Sales from "./screens/Sales";
 import Settings from "./screens/Settings";
 import { BottomNav } from "./components/BottomNav";
 
@@ -169,6 +170,7 @@ export default function App() {
           <Route path="/products/:id" element={<ProductDetail />} />
           <Route path="/products/:id/edit" element={<EditProduct />} />
           <Route path="/customers" element={<Customers />} />
+          <Route path="/sales" element={<Sales />} />
           <Route path="/sell" element={<Record />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Home />} />

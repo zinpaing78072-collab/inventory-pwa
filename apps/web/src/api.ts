@@ -106,6 +106,7 @@ export const api = {
   deleteProduct: (id: string) => request<{ ok: boolean }>(`/products/${id}`, { method: "DELETE" }),
   history: (id: string) =>
     request<{ movements: Movement[]; sales: Sale[] }>(`/products/${id}/history`),
+  sales: (limit = 60) => request<Sale[]>(`/sales?limit=${limit}`),
 
   /* colors + photos */
   addColor: (productId: string, name: string) =>

@@ -9,17 +9,27 @@ import { photoUrlOf } from "../components/util";
 
 /* Record screen (route /sell): one customer, many product lines in one bill,
  * one whole-bill discount, instant commit (replaces the per-product
- * RecordSaleSheet; approved prototype: record.html). Arriving from a product's
+ * RecordSaleSheet; approved prototype: record.html). A line holds ONE product
+ * but MULTIPLE colors — a dropdown picks which color's size rows you're
+ * editing; quantities persist per color×size. Arriving from a product's
  * "Record sale" button preloads that product with its first color chosen. */
 
 interface Line {
   product: ProductFull;
-  ci: number; // which color of this product is in the bill
-  qty: Record<number, number>; // sizeId -> units
+  ci: number; // which color the dropdown currently shows
+  qty: Record<string, number>; // "colorId|sizeId" -> units (any color of this product)
 }
 
+function priceOf(p: ProductFull, sizeId: number): number {
+  return p.sizes.find((s) => s.id === sizeId)?.price ?? 0;
+}
 function lineTotal(l: Line): number {
-  return l.product.sizes.reduce((a, s) => a + (l.qty[s.id] || 0) * s.price, 0);
+  return Object.entries(l.qty).reduce((a, [key, q]) => a + q * priceOf(l.product, Number(key.split("|")[1])), 0);
+}
+function colorPieces(l: Line, colorId: number): number {
+  return Object.entries(l.qty)
+    .filter(([key, q]) => key.startsWith(`${colorId}|`) && q > 0)
+    .reduce((a, [, q]) => a + q, 0);
 }
 function linePieces(l: Line): number {
   return Object.values(l.qty).reduce((a, b) => a + b, 0);
@@ -69,20 +79,26 @@ export default function Record() {
   }, [q, pickProduct, addOpen]);
 
   const addLine = (p: ProductFull, ci: number) => {
-    if (lines.some((l) => l.product.id === p.id && l.ci === ci)) {
-      toast("That color is already in the bill — raise its quantity");
+    if (lines.some((l) => l.product.id === p.id)) {
+      toast("Already in the bill — the color dropdown adds its other colors");
       return;
     }
-    const firstSize = p.sizes[0]?.id;
-    setLines((ls) => [...ls, { product: p, ci, qty: firstSize ? { [firstSize]: 1 } : {} }]);
+    const first = p.sizes[0]?.id;
+    setLines((ls) => [
+      ...ls,
+      { product: p, ci, qty: first && p.colors[ci] ? { [`${p.colors[ci].id}|${first}`]: 1 } : {} },
+    ]);
     setPickProduct(null);
     setSums(null);
   };
 
-  const setQty = (li: number, sizeId: number, v: number) =>
+  const setQty = (li: number, key: string, v: number) =>
     setLines((ls) =>
-      ls.map((l, i) => (i === li ? { ...l, qty: { ...l.qty, [sizeId]: Math.max(0, v) } } : l))
+      ls.map((l, i) => (i === li ? { ...l, qty: { ...l.qty, [key]: Math.max(0, v) } } : l))
     );
+
+  const setColor = (li: number, ci: number) =>
+    setLines((ls) => ls.map((l, i) => (i === li ? { ...l, ci } : l)));
 
   const closeAdd = () => {
     setAddOpen(false);
@@ -98,11 +114,9 @@ export default function Record() {
   const confirm = async () => {
     const flat: SaleInput["lines"] = [];
     for (const l of lines) {
-      const c = l.product.colors[l.ci];
-      for (const s of l.product.sizes) {
-        const qty = l.qty[s.id] || 0;
+      for (const [key, qty] of Object.entries(l.qty)) {
         if (qty <= 0) continue;
-        const vid = l.product.variantIds[`${c.id}|${s.id}`];
+        const vid = l.product.variantIds[key];
         if (!vid) continue;
         flat.push({ variantId: vid, qty });
       }
@@ -185,32 +199,27 @@ export default function Record() {
         {lines.map((l, li) => {
           const c = l.product.colors[l.ci];
           return (
-            <div className="rec-line" key={`${l.product.id}:${l.ci}`}>
-              <button className="rec-col" title="Tap to change color" onClick={() =>
-                setLines((ls) =>
-                  ls.map((x, i) => (i === li ? { ...x, ci: (x.ci + 1) % x.product.colors.length } : x))
-                )
-              }>
-                {c.photos[0] ? (
-                  <img className="rec-thumb" src={photoUrlOf(c.photos[0].filename)} alt={c.name} />
-                ) : (
-                  <span className="rec-thumb rec-noimg">No photo</span>
-                )}
-              </button>
+            <div className="rec-line" key={l.product.id}>
+              {c.photos[0] ? (
+                <img className="rec-thumb" src={photoUrlOf(c.photos[0].filename)} alt={c.name} />
+              ) : (
+                <span className="rec-thumb rec-noimg">No photo</span>
+              )}
               <div className="rec-mid">
                 <div className="pn-row">
                   <span className="pn">{l.product.name}</span>
-                  <button
-                    className="rec-pill"
-                    title="Tap to change color"
-                    onClick={() =>
-                      setLines((ls) =>
-                        ls.map((x, i) => (i === li ? { ...x, ci: (x.ci + 1) % x.product.colors.length } : x))
-                      )
-                    }
+                  <select
+                    className="rec-select"
+                    value={l.ci}
+                    onChange={(e) => setColor(li, Number(e.target.value))}
+                    aria-label="Color"
                   >
-                    {c.name} ›
-                  </button>
+                    {l.product.colors.map((cc, i) => (
+                      <option key={cc.id} value={i}>
+                        {cc.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 {l.product.sizes.map((s) => {
                   const key = `${c.id}|${s.id}`;
@@ -219,13 +228,22 @@ export default function Record() {
                       <span className="lab">{s.label}</span>
                       <span className="pr">{mmk(s.price)}</span>
                       <Stepper
-                        value={l.qty[s.id] || 0}
+                        value={l.qty[key] || 0}
                         max={l.product.qty[key] ?? 0}
-                        onChange={(v) => setQty(li, s.id, v)}
+                        onChange={(v) => setQty(li, key, v)}
                       />
                     </div>
                   );
                 })}
+                {l.product.colors.some((cc) => colorPieces(l, cc.id) > 0) && (
+                  <div className="rec-note">
+                    Buying:{" "}
+                    {l.product.colors
+                      .filter((cc) => colorPieces(l, cc.id) > 0)
+                      .map((cc) => `${cc.name} ×${colorPieces(l, cc.id)}`)
+                      .join(" · ")}
+                  </div>
+                )}
               </div>
               <div className="rec-sumslot">
                 <div className="amt">{mmk(lineTotal(l))}</div>

@@ -666,8 +666,18 @@ api.post("/sales", auth.requireDevice, h(async (req, res) => {
   res.json(sale);
 }));
 
-async function getSale(id: string): Promise<shared.Sale | undefined> {
-  const row = db.prepare("SELECT * FROM sales WHERE id = ?").get(id) as any;
+api.get("/sales", auth.requireDevice, h(async (req, res) => {
+  const limit = Math.min(reqInt(req.query.limit ?? "60", "limit") || 60, 200);
+  const ids = db.prepare("SELECT id FROM sales ORDER BY at DESC LIMIT ?").all(limit) as { id: string }[];
+  const out: shared.Sale[] = [];
+  for (const s of ids) {
+    const sale = await getSale(s.id);
+    if (sale) out.push(sale);
+  }
+  res.json(out);
+}));
+
+async function getSale(id: string): Promise<shared.Sale | undefined> {  const row = db.prepare("SELECT * FROM sales WHERE id = ?").get(id) as any;
   if (!row) return undefined;
   const lines = db.prepare("SELECT * FROM sale_lines WHERE sale_id = ?").all(id) as any[];
   const total = lines.reduce((a, l) => a + l.qty * l.price, 0);
