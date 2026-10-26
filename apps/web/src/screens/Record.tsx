@@ -88,8 +88,10 @@ export default function Record() {
       ...ls,
       { product: p, ci, qty: first && p.colors[ci] ? { [`${p.colors[ci].id}|${first}`]: 1 } : {} },
     ]);
+    setAddOpen(false);
     setPickProduct(null);
     setSums(null);
+    (document.activeElement as HTMLElement | null)?.blur();
   };
 
   const setQty = (li: number, key: string, v: number) =>
@@ -103,6 +105,7 @@ export default function Record() {
   const closeAdd = () => {
     setAddOpen(false);
     setPickProduct(null);
+    (document.activeElement as HTMLElement | null)?.blur();
   };
 
   const removeLine = (li: number) => setLines((ls) => ls.filter((_, i) => i !== li));
