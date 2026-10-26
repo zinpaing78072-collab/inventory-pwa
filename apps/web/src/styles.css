@@ -207,14 +207,6 @@ a { color: inherit; text-decoration: none; }
 }
 .rec-select option { color: var(--ink); background: #fff; }
 .rec-note { font-size: 10.5px; color: var(--muted); padding-top: 4px; overflow-wrap: anywhere; }
-.size-add {
-  background-color: rgba(27, 26, 23, 0.07);
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231B1A17' stroke-width='1.4' fill='none'/%3E%3C/svg%3E");
-  font-size: 10.5px;
-  padding: 4px 22px 4px 9px;
-  margin: 4px 0 0;
-  align-self: start;
-}
 .rec-row-rm {
   width: 20px;
   height: 20px;
@@ -229,7 +221,39 @@ a { color: inherit; text-decoration: none; }
 .rec-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
 .rec-row .lab { min-width: 44px; }
 .rec-row .pr { color: var(--muted); font-size: 11px; white-space: nowrap; }
-.rec-sumslot { text-align: right; align-self: start; }
+.rec-line { position: relative; }
+.rec-line .rec-rm {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 26px;
+  border-radius: 7px;
+  margin: 0;
+}
+.rec-sumslot { text-align: right; align-self: start; padding-top: 30px; }
+.rec-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.color-chip {
+  border: 1px solid var(--hairline);
+  background: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.color-chip.on { border-color: var(--ink); font-weight: 640; }
+.rec-add {
+  background-color: var(--panel);
+  color: var(--ink);
+  font-weight: 600;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231B1A17' stroke-width='1.4' fill='none'/%3E%3C/svg%3E");
+  font-size: 10.5px;
+  padding: 4px 22px 4px 9px;
+  margin: 4px 0 2px;
+  align-self: start;
+  display: inline-block;
+}
 .rec-sumslot .amt { font-size: 13px; font-weight: 650; }
 .rec-rm {
   margin-top: 6px;

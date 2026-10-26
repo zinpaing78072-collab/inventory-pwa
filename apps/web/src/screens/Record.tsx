@@ -84,7 +84,7 @@ export default function Record() {
 
   const addLine = (p: ProductFull, ci: number) => {
     if (lines.some((l) => l.product.id === p.id)) {
-      toast("Already in the bill — the color dropdown adds its other colors");
+      toast("Already in the bill — Add color adds its other colors");
       return;
     }
     const first = p.sizes[0]?.id;
@@ -98,6 +98,30 @@ export default function Record() {
     setSums(null);
     (document.activeElement as HTMLElement | null)?.blur();
   };
+
+  /* pick a color from the "+ Add color…" dropdown: focus it and, if the product
+   * has no rows for it yet, open its first size at 1 */
+  const addColorPick = (li: number, colorId: number) =>
+    setLines((ls) =>
+      ls.map((l, i) => {
+        if (i !== li) return l;
+        const ci = Math.max(0, l.product.colors.findIndex((x) => x.id === colorId));
+        const firstKey =
+          l.product.sizes[0]?.id !== undefined
+            ? `${colorId}|${l.product.sizes[0].id}`
+            : "";
+        const colorStarted = l.added.some((k) => k.startsWith(`${colorId}|`));
+        return {
+          ...l,
+          ci,
+          added: colorStarted || !firstKey ? l.added : [...l.added, firstKey],
+          qty:
+            !colorStarted && firstKey
+              ? { ...l.qty, [firstKey]: Math.max(1, l.qty[firstKey] || 0) }
+              : l.qty,
+        };
+      })
+    );
 
   const setSizeAdd = (li: number, key: string) =>
     setLines((ls) =>
@@ -224,6 +248,9 @@ export default function Record() {
           const c = l.product.colors[l.ci];
           return (
             <div className="rec-line" key={l.product.id}>
+              <button className="rec-rm" title="Remove this product from the bill" onClick={() => removeLine(li)}>
+                ✕
+              </button>
               {c.photos[0] ? (
                 <img className="rec-thumb" src={photoUrlOf(c.photos[0].filename)} alt={c.name} />
               ) : (
@@ -232,19 +259,40 @@ export default function Record() {
               <div className="rec-mid">
                 <div className="pn-row">
                   <span className="pn">{l.product.name}</span>
-                  <select
-                    className="rec-select"
-                    value={l.ci}
-                    onChange={(e) => setColor(li, Number(e.target.value))}
-                    aria-label="Color"
-                  >
-                    {l.product.colors.map((cc, i) => (
-                      <option key={cc.id} value={i}>
-                        {cc.name}
-                      </option>
-                    ))}
-                  </select>
                 </div>
+                <div className="rec-chips">
+                  {l.product.colors
+                    .filter((cc) => l.added.some((k) => k.startsWith(`${cc.id}|`)))
+                    .map((cc) => (
+                      <button
+                        key={cc.id}
+                        className={"color-chip" + (cc.id === c.id ? " on" : "")}
+                        onClick={() => setColor(li, l.product.colors.findIndex((x) => x.id === cc.id))}
+                      >
+                        {cc.name}
+                        {colorPieces(l, cc.id) > 0 ? ` ×${colorPieces(l, cc.id)}` : ""}
+                      </button>
+                    ))}
+                </div>
+                {!l.product.colors.every((cc) => l.added.some((k) => k.startsWith(`${cc.id}|`))) && (
+                  <div>
+                    <select
+                      className="rec-select rec-add"
+                      value=""
+                      onChange={(e) => e.target.value && addColorPick(li, Number(e.target.value))}
+                      aria-label="Add color"
+                    >
+                      <option value="">＋ Add color…</option>
+                      {l.product.colors
+                        .filter((cc) => !l.added.some((k) => k.startsWith(`${cc.id}|`)))
+                        .map((cc) => (
+                          <option key={cc.id} value={cc.id}>
+                            {cc.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
                 {l.product.sizes.map((s) => {
                   const key = `${c.id}|${s.id}`;
                   if (!l.added.includes(key)) return null;
@@ -269,7 +317,7 @@ export default function Record() {
                 })}
                 <div className="rec-row">
                   <select
-                    className="rec-select size-add"
+                    className="rec-select rec-add"
                     value=""
                     onChange={(e) => setSizeAdd(li, e.target.value)}
                     aria-label="Add size"
@@ -289,21 +337,9 @@ export default function Record() {
                     )}
                   </select>
                 </div>
-                {l.product.colors.some((cc) => colorPieces(l, cc.id) > 0) && (
-                  <div className="rec-note">
-                    Buying:{" "}
-                    {l.product.colors
-                      .filter((cc) => colorPieces(l, cc.id) > 0)
-                      .map((cc) => `${cc.name} ×${colorPieces(l, cc.id)}`)
-                      .join(" · ")}
-                  </div>
-                )}
               </div>
               <div className="rec-sumslot">
                 <div className="amt">{mmk(lineTotal(l))}</div>
-                <button className="rec-rm" onClick={() => removeLine(li)}>
-                  ✕
-                </button>
               </div>
             </div>
           );
