@@ -813,7 +813,7 @@ api.delete("/devices/:id", auth.requireDevice, h(async (req, res) => {
   res.json({ ok: true });
 }));
 
-api.post("/pairing/regenerate", auth.requireDevice, h(async (_req, res) => {
+api.post("/pairing/regenerate", auth.requireDeviceOrLocal, h(async (_req, res) => {
   res.json({ code: auth.regeneratePairingCode() });
 }));
 

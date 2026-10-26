@@ -46,6 +46,20 @@ export function pairInfo(): PairInfo {
 type AuthedRequest = { headers: Record<string, unknown>; query: Record<string, unknown> };
 type AuthedResponse = { status(code: number): { json(body: unknown): void } };
 
+/** Express middleware: valid device token (header or ?t=), OR the request
+ * arriving from the server phone itself (loopback). Loopback access keeps
+ * pairing recoverable when every paired phone loses its token at once (e.g.
+ * the server address changed) — random devices on the LAN still can't mint
+ * codes, but someone at the server phone always can. */
+export function requireDeviceOrLocal(req: any, res: any, next: any): void {
+  const ip: string = String(req.ip ?? req.socket?.remoteAddress ?? "");
+  if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1") {
+    next();
+    return;
+  }
+  requireDevice(req, res, next);
+}
+
 /** Express middleware: requires a valid device token (header or ?t=). */
 export function requireDevice(req: any, res: any, next: any): void {
   const header = req.headers["authorization"];
