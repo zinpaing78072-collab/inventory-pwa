@@ -84,6 +84,21 @@ export default function Settings() {
             <button
               className="btn small"
               onClick={() => {
+                if (!code) {
+                  toast("Tap New code first");
+                  return;
+                }
+                void navigator.clipboard?.writeText(code).then(
+                  () => toast("Code copied — long-press Paste in this phone's other app instance"),
+                  () => toast("Could not copy")
+                );
+              }}
+            >
+              Copy code
+            </button>
+            <button
+              className="btn small"
+              onClick={() => {
                 void navigator.clipboard?.writeText(`${location.origin}${location.pathname}`).then(
                   () => toast("Server address copied — send it to the other phone"),
                   () => toast("Could not copy")
