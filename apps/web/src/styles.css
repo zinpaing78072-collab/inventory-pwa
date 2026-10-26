@@ -32,13 +32,13 @@ button {
   padding: 0;
   cursor: pointer;
 }
-input, textarea, select {
-  font: inherit;
-  color: var(--ink);
+input, textarea, select { font: inherit; color: var(--ink); }
+input, textarea {
   /* iOS Safari auto-zooms the page when a focused control renders < 16px.
-     Force 16px+ on every form control so focus never zooms; !important wins
-     over the smaller per-context sizes (sizeselect, discbox, qty rows…). */
-  font-size: max(16px, 1em) !important;
+     Force 16px+ on text controls so focus never zooms; !important wins over
+     the smaller per-context sizes (discbox, qty rows…). Selects are exempt:
+     they open native pickers, never a keyboard, so they can render compact. */
+  font-size: 16px !important;
 }
 img { display: block; }
 a { color: inherit; text-decoration: none; }
@@ -190,20 +190,22 @@ a { color: inherit; text-decoration: none; }
   flex: none;
   background: rgba(27, 26, 23, 0.62);
   color: #fff;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 500;
-  padding: 4px 9px;
+  line-height: 1.2;
+  padding: 5px 24px 5px 11px;
   border-radius: 999px;
   border: 0;
   cursor: pointer;
+  min-height: 0;
+  height: auto;
 }
 .rec-select {
   appearance: none;
   -webkit-appearance: none;
-  padding-right: 22px;
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23fff' stroke-width='1.4' fill='none'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 8px center;
+  background-position: right 9px center;
 }
 .rec-select option { color: var(--ink); background: #fff; }
 .rec-note { font-size: 10.5px; color: var(--muted); padding-top: 4px; overflow-wrap: anywhere; }
@@ -237,8 +239,8 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--hairline);
   background: none;
   border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 10.5px;
+  padding: 5px 11px;
+  font-size: 11.5px;
   color: var(--ink);
   cursor: pointer;
 }
@@ -248,8 +250,8 @@ a { color: inherit; text-decoration: none; }
   color: var(--ink);
   font-weight: 600;
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231B1A17' stroke-width='1.4' fill='none'/%3E%3C/svg%3E");
-  font-size: 10.5px;
-  padding: 4px 22px 4px 9px;
+  font-size: 11.5px;
+  padding: 5px 24px 5px 11px;
   margin: 4px 0 2px;
   align-self: start;
   display: inline-block;
@@ -586,12 +588,12 @@ a { color: inherit; text-decoration: none; }
   font-variant-numeric: tabular-nums;
 }
 .step {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   border: 1.5px solid #b9b3a4;
   background: var(--panel);
-  font-size: 19px;
+  font-size: 16px;
   font-weight: 600;
   display: grid;
   place-items: center;
