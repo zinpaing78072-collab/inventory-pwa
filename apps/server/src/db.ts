@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 /* Database bootstrap. One SQLite file per server phone (never committed). */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const DATA_DIR = path.join(__dirname, "..", "data");
+export const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, "..", "data");
 export const PHOTOS_DIR = path.join(DATA_DIR, "photos");
 export const BACKUPS_DIR = path.join(DATA_DIR, "backups");
 export const BACKUP_PHOTOS_DIR = path.join(BACKUPS_DIR, "photos-current");
