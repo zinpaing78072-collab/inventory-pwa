@@ -18,6 +18,7 @@ interface Line {
   product: ProductFull;
   ci: number; // which color the dropdown currently shows
   qty: Record<string, number>; // "colorId|sizeId" -> units (any color of this product)
+  added: string[]; // "colorId|sizeId" keys with visible size rows, in add order
 }
 
 function priceOf(p: ProductFull, sizeId: number): number {
@@ -63,7 +64,10 @@ export default function Record() {
     if (!productId) return;
     void api
       .product(productId)
-      .then((p) => setLines([{ product: p, ci: 0, qty: {} }]))
+      .then((p) => {
+        const first = p.sizes[0]?.id ? `${p.colors[0]?.id}|${p.sizes[0].id}` : "";
+        setLines([{ product: p, ci: 0, qty: first ? { [first]: 1 } : {}, added: first ? [first] : [] }]);
+      })
       .catch(() => setErr("Could not load that product"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -84,15 +88,32 @@ export default function Record() {
       return;
     }
     const first = p.sizes[0]?.id;
+    const key = first && p.colors[ci] ? `${p.colors[ci].id}|${first}` : "";
     setLines((ls) => [
       ...ls,
-      { product: p, ci, qty: first && p.colors[ci] ? { [`${p.colors[ci].id}|${first}`]: 1 } : {} },
+      { product: p, ci, qty: key ? { [key]: 1 } : {}, added: key ? [key] : [] },
     ]);
     setAddOpen(false);
     setPickProduct(null);
     setSums(null);
     (document.activeElement as HTMLElement | null)?.blur();
   };
+
+  const setSizeAdd = (li: number, key: string) =>
+    setLines((ls) =>
+      ls.map((l, i) =>
+        i === li && key && !l.added.includes(key)
+          ? { ...l, added: [...l.added, key], qty: { ...l.qty, [key]: Math.max(1, l.qty[key] || 0) } }
+          : l
+      )
+    );
+
+  const removeSize = (li: number, key: string) =>
+    setLines((ls) =>
+      ls.map((l, i) =>
+        i === li ? { ...l, added: l.added.filter((k) => k !== key), qty: { ...l.qty, [key]: 0 } } : l
+      )
+    );
 
   const setQty = (li: number, key: string, v: number) =>
     setLines((ls) =>
@@ -153,9 +174,9 @@ export default function Record() {
       setErr(String((e as Error).message ?? e));
       void (async () => {
         const pairs = await Promise.all(
-          lines.map(async (l) => ({ fresh: await api.product(l.product.id).catch(() => l.product), ci: l.ci }))
+          lines.map(async (l) => ({ fresh: await api.product(l.product.id).catch(() => l.product), l }))
         );
-        setLines(pairs.map(({ fresh, ci }) => ({ product: fresh, ci, qty: {} })));
+        setLines(pairs.map(({ fresh, l }) => ({ ...l, product: fresh, qty: {} })));
       })();
     }
   };
@@ -226,6 +247,7 @@ export default function Record() {
                 </div>
                 {l.product.sizes.map((s) => {
                   const key = `${c.id}|${s.id}`;
+                  if (!l.added.includes(key)) return null;
                   return (
                     <div className="rec-row" key={s.id}>
                       <span className="lab">{s.label}</span>
@@ -235,9 +257,38 @@ export default function Record() {
                         max={l.product.qty[key] ?? 0}
                         onChange={(v) => setQty(li, key, v)}
                       />
+                      <button
+                        className="rec-row-rm"
+                        title="Remove this size from the bill"
+                        onClick={() => removeSize(li, key)}
+                      >
+                        ✕
+                      </button>
                     </div>
                   );
                 })}
+                <div className="rec-row">
+                  <select
+                    className="rec-select size-add"
+                    value=""
+                    onChange={(e) => setSizeAdd(li, e.target.value)}
+                    aria-label="Add size"
+                  >
+                    <option value="">＋ Add size…</option>
+                    {l.product.sizes
+                      .filter((s) => !l.added.includes(`${c.id}|${s.id}`))
+                      .map((s) => (
+                        <option key={s.id} value={`${c.id}|${s.id}`}>
+                          {s.label}
+                        </option>
+                      ))}
+                    {l.product.sizes.length === l.added.filter((k) => k.startsWith(`${c.id}|`)).length && (
+                      <option value="" disabled>
+                        all sizes added
+                      </option>
+                    )}
+                  </select>
+                </div>
                 {l.product.colors.some((cc) => colorPieces(l, cc.id) > 0) && (
                   <div className="rec-note">
                     Buying:{" "}
