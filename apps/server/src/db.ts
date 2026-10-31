@@ -19,7 +19,7 @@ db.exec("PRAGMA journal_mode = WAL");
 db.exec("PRAGMA foreign_keys = ON");
 db.exec("PRAGMA busy_timeout = 5000");
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export function migrate(): void {
   const dbv = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
@@ -153,6 +153,18 @@ export function migrate(): void {
       db.exec("ALTER TABLE sales ADD COLUMN discount INTEGER NOT NULL DEFAULT 0");
     }
   }
+  /* v4: operation ledger — client Operation IDs applied exactly once, each with
+   * its stored result so a replayed/duplicated request gets the original answer */
+  if (dbv < 4) {
+    db.exec(
+      `CREATE TABLE IF NOT EXISTS ops (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        result TEXT NOT NULL,
+        at INTEGER NOT NULL
+      )`
+    );
+  }
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -182,9 +194,13 @@ export function newId(): string {
   return crypto.randomUUID();
 }
 
-/* run fn inside a transaction; throw rolls back */
+/* run fn inside a transaction; throw rolls back. Re-entrant with applyOnce:
+ * an outer transaction turns nested txn() calls into plain execution. */
+let txnDepth = 0;
 export function txn<T>(fn: () => T): T {
+  if (txnDepth > 0) return fn();
   db.exec("BEGIN");
+  txnDepth++;
   try {
     const out = fn();
     bumpChangeSeq();
@@ -193,6 +209,8 @@ export function txn<T>(fn: () => T): T {
   } catch (err) {
     db.exec("ROLLBACK");
     throw err;
+  } finally {
+    txnDepth--;
   }
 }
 

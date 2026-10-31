@@ -15,6 +15,7 @@ import {
   PHOTOS_DIR,
 } from "./db.js";
 import * as auth from "./auth.js";
+import { applyOnce } from "./ops.js";
 
 export const api = express.Router();
 api.use(express.json({ limit: "2mb" }));
@@ -528,20 +529,22 @@ api.post("/movements/stock-in", auth.requireDevice, h(async (req, res) => {
   const qty = reqInt(req.body?.qty, "qty");
   if (qty <= 0) throw new HttpError("qty must be positive", 400);
   const note = str(req.body?.note);
-  txn(() => {
-    const v = variantById(variantId);
-    const n = namesFor(v);
-    db.prepare("UPDATE variants SET qty = qty + ? WHERE id = ?").run(qty, v.id);
-    movementStmt().run(
-      Date.now(),
-      "stock-in",
-      v.id,
-      v.product_id,
-      qty,
-      note,
-      null,
-      (req as any).device?.id ?? null
-    );
+  applyOnce(req.body?.__op, "stock-in", () => {
+    txn(() => {
+      const v = variantById(variantId);
+      const n = namesFor(v);
+      db.prepare("UPDATE variants SET qty = qty + ? WHERE id = ?").run(qty, v.id);
+      movementStmt().run(
+        Date.now(),
+        "stock-in",
+        v.id,
+        v.product_id,
+        qty,
+        note,
+        null,
+        (req as any).device?.id ?? null
+      );
+    });
   });
   res.json({ ok: true });
 }));
@@ -550,22 +553,24 @@ api.post("/movements/adjust", auth.requireDevice, h(async (req, res) => {
   const variantId = reqInt(req.body?.variantId, "variantId");
   const setTo = reqInt(req.body?.setTo, "setTo");
   const note = str(req.body?.note);
-  txn(() => {
-    const v = variantById(variantId);
-    const delta = setTo - v.qty;
-    if (delta === 0) return;
-    const n = namesFor(v);
-    db.prepare("UPDATE variants SET qty = ? WHERE id = ?").run(setTo, v.id);
-    movementStmt().run(
-      Date.now(),
-      "adjust",
-      v.id,
-      v.product_id,
-      delta,
-      note || "Adjust",
-      null,
-      (req as any).device?.id ?? null
-    );
+  applyOnce(req.body?.__op, "adjust", () => {
+    txn(() => {
+      const v = variantById(variantId);
+      const delta = setTo - v.qty;
+      if (delta === 0) return;
+      const n = namesFor(v);
+      db.prepare("UPDATE variants SET qty = ? WHERE id = ?").run(setTo, v.id);
+      movementStmt().run(
+        Date.now(),
+        "adjust",
+        v.id,
+        v.product_id,
+        delta,
+        note || "Adjust",
+        null,
+        (req as any).device?.id ?? null
+      );
+    });
   });
   res.json({ ok: true });
 }));
@@ -625,42 +630,46 @@ api.post("/sales", auth.requireDevice, h(async (req, res) => {
   const agg = new Map<number, number>();
   for (const l of lines) agg.set(l.variantId, (agg.get(l.variantId) ?? 0) + l.qty);
 
-  const saleId = newId();
-  txn(() => {
-    // stock check first — all-or-nothing; also totals the bill at true prices
-    let itemsTotal = 0;
-    for (const [vid, q] of agg) {
-      const v = variantById(vid);
-      if (v.qty < q) {
-        const n = namesFor(v);
-        throw new HttpError(`Not enough stock: ${n.productName} ${n.colorName} ${n.sizeLabel}`, 409);
+  /* Operation ID → applied exactly once; repeat submissions get the original sale */
+  const saleId = applyOnce(req.body?.__op, "sale", () => {
+    const saleId = newId();
+    txn(() => {
+      // stock check first — all-or-nothing; also totals the bill at true prices
+      let itemsTotal = 0;
+      for (const [vid, q] of agg) {
+        const v = variantById(vid);
+        if (v.qty < q) {
+          const n = namesFor(v);
+          throw new HttpError(`Not enough stock: ${n.productName} ${n.colorName} ${n.sizeLabel}`, 409);
+        }
+        itemsTotal += q * (db.prepare("SELECT price FROM sizes WHERE id = ?").get(v.size_id) as { price: number }).price;
       }
-      itemsTotal += q * (db.prepare("SELECT price FROM sizes WHERE id = ?").get(v.size_id) as { price: number }).price;
-    }
-    if (discount > itemsTotal) {
-      throw new HttpError(`Discount (Ks ${discount.toLocaleString("en-US")}) exceeds the bill total (Ks ${itemsTotal.toLocaleString("en-US")})`, 400);
-    }
-    const cust = findOrCreateCustomer(req.body ?? {});
-    const at = Date.now();
-    db.prepare(
-      "INSERT INTO sales (id, customer_id, customer_name, customer_phone, customer_notes, discount, at) VALUES (?,?,?,?,?,?,?)"
-    ).run(saleId, cust.id || null, cust.name, cust.phone, str(req.body?.customerNotes), discount, at);
+      if (discount > itemsTotal) {
+        throw new HttpError(`Discount (Ks ${discount.toLocaleString("en-US")}) exceeds the bill total (Ks ${itemsTotal.toLocaleString("en-US")})`, 400);
+      }
+      const cust = findOrCreateCustomer(req.body ?? {});
+      const at = Date.now();
+      db.prepare(
+        "INSERT INTO sales (id, customer_id, customer_name, customer_phone, customer_notes, discount, at) VALUES (?,?,?,?,?,?,?)"
+      ).run(saleId, cust.id || null, cust.name, cust.phone, str(req.body?.customerNotes), discount, at);
 
-    const lineStmt = db.prepare(
-      `INSERT INTO sale_lines
-       (sale_id, variant_id, product_id, product_name, brand, color_name, size_label, qty, price)
-       VALUES (?,?,?,?,?,?,?,?,?)`
-    );
-    for (const [vid, q] of agg) {
-      const v = variantById(vid);
-      const n = namesFor(v);
-      const sizePrice = (
-        db.prepare("SELECT price FROM sizes WHERE id = ?").get(v.size_id) as { price: number }
-      ).price;
-      lineStmt.run(saleId, v.id, v.product_id, n.productName, n.brand, n.colorName, n.sizeLabel, q, sizePrice);
-      db.prepare("UPDATE variants SET qty = qty - ? WHERE id = ?").run(q, v.id);
-      movementStmt().run(at, "sale", v.id, v.product_id, -q, "", saleId, (req as any).device?.id ?? null);
-    }
+      const lineStmt = db.prepare(
+        `INSERT INTO sale_lines
+         (sale_id, variant_id, product_id, product_name, brand, color_name, size_label, qty, price)
+         VALUES (?,?,?,?,?,?,?,?,?)`
+      );
+      for (const [vid, q] of agg) {
+        const v = variantById(vid);
+        const n = namesFor(v);
+        const sizePrice = (
+          db.prepare("SELECT price FROM sizes WHERE id = ?").get(v.size_id) as { price: number }
+        ).price;
+        lineStmt.run(saleId, v.id, v.product_id, n.productName, n.brand, n.colorName, n.sizeLabel, q, sizePrice);
+        db.prepare("UPDATE variants SET qty = qty - ? WHERE id = ?").run(q, v.id);
+        movementStmt().run(at, "sale", v.id, v.product_id, -q, "", saleId, (req as any).device?.id ?? null);
+      }
+    });
+    return saleId;
   });
   const sale = (await getSale(saleId))!;
   res.json(sale);
@@ -717,27 +726,29 @@ api.post("/sales/:id/return", auth.requireDevice, h(async (req, res) => {
     : [];
   if (retLines.length === 0) throw new HttpError("Empty return", 400);
   const note = str(req.body?.note);
-  txn(() => {
-    for (const rl of retLines) {
-      const line = db.prepare("SELECT * FROM sale_lines WHERE id = ? AND sale_id = ?").get(rl.saleLineId, saleId) as any;
-      if (!line) throw new HttpError("Sale line not found", 404);
-      const remaining = line.qty - line.returned;
-      if (rl.qty <= 0 || rl.qty > remaining)
-        throw new HttpError(`Invalid return qty (remaining ${remaining})`, 400);
-      db.prepare("UPDATE sale_lines SET returned = returned + ? WHERE id = ?").run(rl.qty, line.id);
-      const v = variantById(line.variant_id);
-      db.prepare("UPDATE variants SET qty = qty + ? WHERE id = ?").run(rl.qty, line.id);
-      movementStmt().run(
-        Date.now(),
-        "return",
-        line.variant_id,
-        line.product_id,
-        rl.qty,
-        note || "Return",
-        saleId,
-        (req as any).device?.id ?? null
-      );
-    }
+  applyOnce(req.body?.__op, "return", () => {
+    txn(() => {
+      for (const rl of retLines) {
+        const line = db.prepare("SELECT * FROM sale_lines WHERE id = ? AND sale_id = ?").get(rl.saleLineId, saleId) as any;
+        if (!line) throw new HttpError("Sale line not found", 404);
+        const remaining = line.qty - line.returned;
+        if (rl.qty <= 0 || rl.qty > remaining)
+          throw new HttpError(`Invalid return qty (remaining ${remaining})`, 400);
+        db.prepare("UPDATE sale_lines SET returned = returned + ? WHERE id = ?").run(rl.qty, line.id);
+        const v = variantById(line.variant_id);
+        db.prepare("UPDATE variants SET qty = qty + ? WHERE id = ?").run(rl.qty, v.id);
+        movementStmt().run(
+          Date.now(),
+          "return",
+          line.variant_id,
+          line.product_id,
+          rl.qty,
+          note || "Return",
+          saleId,
+          (req as any).device?.id ?? null
+        );
+      }
+    });
   });
   res.json((await getSale(saleId))!);
 }));
